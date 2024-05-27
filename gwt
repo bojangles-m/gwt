@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# https://gist.github.com/nicknisi/a26f148611517e3d998eb456ac57efff#file-new-worktree-sh-L19
+# CURRENT_BRANCH="$(command git symbolic-ref --short HEAD 2> /dev/null)"
+
 GRAY='\033[0;90m'
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -7,27 +10,46 @@ NOFORMAT='\033[0m'
 
 PROGRAM=$(basename "${BASH_SOURCE[0]}")
 
-# CURRENT_BRANCH="$(command git symbolic-ref --short HEAD 2> /dev/null)"
+function spinner() {
+  tput civis # cursor invisible
+
+  # make sure we use non-unicode character type locale 
+  # (that way it works for any locale as long as the font supports the characters)
+  local LC_CTYPE=C
+
+  local pid=$! # Process Id of the previous running command
+  local spin='⣷⣯⣟⡿⢿⣻⣽⣾'
+  local charwidth=3
+  local i=0
+
+  while kill -0 $pid 2>/dev/null; do
+    local i=$(((i + charwidth) % ${#spin}))
+    printf " \b${spin:$i:$charwidth}"
+    printf >&2 "\b"
+    sleep .1
+  done
+
+  tput cnorm # make cursor visible again
+
+  wait "$pid" # capture exit code
+  return $?
+}
 
 runCommand() {
-  local MESSAGE=$1
+  local message=$1
   shift
-  print "$MESSAGE "
-  "$@" &>/dev/null
+  print "$message "
+  "$@" &>/dev/null &
+  spinner
 
-  if [ $? -eq 0 ]; then
-    success "Done."
-  else
-    error "FAILED."
-    exit 1
-  fi
+  [[ $? -eq 0 ]] && success "Done." || error "FAILED."
 }
 
 print() { echo >&2 -ne "${1-}"; }
 printNL() { echo >&2 -e "${1-}"; }
 msg() { printNL "${GRAY}${1-}${NOFORMAT}"; }
 success() { msg "${GREEN}${1-}${NOFORMAT}"; }
-error() { msg "${RED}${1-}${NOFORMAT}"; }
+error() { msg "${RED}${1-}${NOFORMAT}"; exit 1; }
 die() {
   local msg=$1
   local code=${2-1} # default exit status 1
@@ -58,11 +80,10 @@ EOF
 }
 
 restOfParams() {
-  SOURCE='main'
+  SOURCE='origin/main'
   WORKTREE=("$@")
 
   # check if worktree params exist
-  # [[ -z "${param-}" ]] && die "Missing required parameter: param"
   [[ -z "${WORKTREE}" ]] && die "Missing worktree path";
 
   return 0
@@ -92,6 +113,9 @@ parseParams() {
     esac
     shift
   done
+
+  # die if branch is missing
+  [[ -z "$BRANCH" ]] && die "Missing branch name";
 
   restOfParams $@
 
