@@ -61,10 +61,9 @@ die() {
 
 usage() {
   cat <<EOF
+Script adds/removes a git worktree and the branch associated with the tree.
 
 Usage:  ${PROGRAM} [OPTIONS] COMMAND <worktree-path> 
-
-Script adds/removes a git worktree.
 
 Commands:
   add         Create and run a new container from an image
