@@ -31,8 +31,8 @@ error() { msg "${RED}${1-}${NOFORMAT}"; }
 die() {
   local msg=$1
   local code=${2-1} # default exit status 1
-  print "\n$msg"
-  print "See '${PROGRAM} --help'."
+  printNL "$msg"
+  printNL "See '${PROGRAM} --help'."
   exit "$code"
 }
 
