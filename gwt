@@ -1,0 +1,113 @@
+#!/bin/bash
+
+GRAY='\033[0;90m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NOFORMAT='\033[0m'
+
+PROGRAM=$(basename "${BASH_SOURCE[0]}")
+
+# CURRENT_BRANCH="$(command git symbolic-ref --short HEAD 2> /dev/null)"
+
+runCommand() {
+  local MESSAGE=$1
+  shift
+  print "$MESSAGE "
+  "$@" &>/dev/null
+
+  if [ $? -eq 0 ]; then
+    success "Done."
+  else
+    error "FAILED."
+    exit 1
+  fi
+}
+
+print() { echo >&2 -ne "${1-}"; }
+printNL() { echo >&2 -e "${1-}"; }
+msg() { printNL "${GRAY}${1-}${NOFORMAT}"; }
+success() { msg "${GREEN}${1-}${NOFORMAT}"; }
+error() { msg "${RED}${1-}${NOFORMAT}"; }
+die() {
+  local msg=$1
+  local code=${2-1} # default exit status 1
+  print "\n$msg"
+  print "See '${PROGRAM} --help'."
+  exit "$code"
+}
+
+usage() {
+  cat <<EOF
+
+Usage:  ${PROGRAM} [OPTIONS] COMMAND <worktree-path> 
+
+Script adds/removes a git worktree.
+
+Commands:
+  add         Create and run a new container from an image
+  remove      Remove one or more images
+
+Available options:
+  -h, --help                    Print this help and exit
+
+This script performs the following steps:
+  1. Create a new worktree, based off the base branch (default: develop)
+  2. Install dependencies
+EOF
+  exit 0
+}
+
+restOfParams() {
+  SOURCE='main'
+  WORKTREE=("$@")
+
+  # check if worktree params exist
+  # [[ -z "${param-}" ]] && die "Missing required parameter: param"
+  [[ -z "${WORKTREE}" ]] && die "Missing worktree path";
+
+  return 0
+}
+
+parseParams() {
+  BRANCH=''
+
+  while :; do
+    case "${1-}" in
+      -h | --help) 
+        usage
+        ;;
+
+      -b | --branch)
+        BRANCH=$2
+        shift
+        ;;
+
+      -?*)
+        die "Unknown or missing command/option: $1"
+        ;;
+
+      *) 
+        break
+        ;;
+    esac
+    shift
+  done
+
+  restOfParams $@
+
+  return 0
+}
+
+parseParams $@
+
+# check if branch already exists
+if [ -n "$(git branch --list "$BRANCH")" ]; then
+  runCommand "Generating worktree ($WORKTREE) from existing branch: $BRANCH" git worktree add $WORKTREE $BRANCH
+else 
+  runCommand "Generating worktree: $WORKTREE" git worktree add -b $BRANCH $WORKTREE $SOURCE
+fi
+
+msg "Moving into worktree: $WORKTREE"
+cd $WORKTREE
+runCommand "Installing dependencies" pnpm --silent install
+success "Success."

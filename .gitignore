@@ -1,0 +1,10 @@
+# dependencies
+.vscode/
+/node_modules/
+/dist/
+/package/
+
+# misc
+.DS_Store
+*.log
+*.code-workspace
