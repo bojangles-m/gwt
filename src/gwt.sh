@@ -1,6 +1,15 @@
 #!/bin/bash
 
-source spinner.sh
+getSourceDir() {
+  local source=${BASH_SOURCE[0]}
+  while [ -L "$source" ]; do # resolve $source until the file is no longer a symlink
+    DIR=$( cd -P "$( dirname "$source" )" >/dev/null 2>&1 && pwd )
+    source=$(readlink "$source")
+    [[ $source != /* ]] && source=$DIR/$source # if $source was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+  done
+
+  echo $( cd -P "$( dirname "$source" )" >/dev/null 2>&1 && pwd )
+}
 
 GRAY='\033[0;90m'
 RED='\033[0;31m'
@@ -9,6 +18,9 @@ NOFORMAT='\033[0m'
 
 REMOVE_BRANCH=false
 PROGRAM=$(basename "${BASH_SOURCE[0]}")
+SOURCE_DIR=$(getSourceDir)
+
+source $SOURCE_DIR/spinner.sh
 
 runCommand() {
   local message=$1

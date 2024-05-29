@@ -1,7 +1,9 @@
 {
   "name": "@bojangles/gwt",
   "version": "0.1.0",
-  "bin": "gwt-create.sh",
+  "bin": {
+    "gwt-create": "gwt-create.sh"
+  },
   "keywords": [
     "git",
     "worktree"
