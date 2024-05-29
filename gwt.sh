@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# https://gist.github.com/nicknisi/a26f148611517e3d998eb456ac57efff#file-new-worktree-sh-L19
-# CURRENT_BRANCH="$(command git symbolic-ref --short HEAD 2> /dev/null)"
-
 GRAY='\033[0;90m'
 RED='\033[0;31m'
 GREEN='\033[0;32m'
