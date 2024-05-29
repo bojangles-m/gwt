@@ -13,8 +13,8 @@ while [ -L "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 DIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
 
-mkdir -p ~/.gwt && cp $DIR/gwt.sh "$_"
-sudo ln -s ~/.gwt/gwt.sh /usr/local/bin/gwt
+mkdir -p ~/.gwt && cp $DIR/src/* "$_"
+sudo ln -sf ~/.gwt/src/gwt.sh /usr/local/bin/gwt
 
 printNL "gwt script ready to use. ${GREEN}Done.${NOFORMAT}"
 printNL "See 'gwt --help'."

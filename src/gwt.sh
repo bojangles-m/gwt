@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source spinner.sh
+
 GRAY='\033[0;90m'
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -7,31 +9,6 @@ NOFORMAT='\033[0m'
 
 REMOVE_BRANCH=false
 PROGRAM=$(basename "${BASH_SOURCE[0]}")
-
-function spinner() {
-  tput civis # cursor invisible
-
-  # make sure we use non-unicode character type locale 
-  # (that way it works for any locale as long as the font supports the characters)
-  local LC_CTYPE=C
-
-  local pid=$! # Process Id of the previous running command
-  local spin='⣷⣯⣟⡿⢿⣻⣽⣾'
-  local charwidth=3
-  local i=0
-
-  while kill -0 $pid 2>/dev/null; do
-    local i=$(((i + charwidth) % ${#spin}))
-    printf " \b${spin:$i:$charwidth}"
-    printf >&2 "\b"
-    sleep .1
-  done
-
-  tput cnorm # make cursor visible again
-
-  wait $pid # capture exit code
-  return $?
-}
 
 runCommand() {
   local message=$1
