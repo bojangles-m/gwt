@@ -20,6 +20,7 @@ REMOVE_BRANCH=false
 PROGRAM=$(basename "${BASH_SOURCE[0]}")
 SOURCE_DIR=$(getSourceDir)
 
+source $SOURCE_DIR/version.sh
 source $SOURCE_DIR/spinner.sh
 
 runCommand() {
@@ -45,6 +46,14 @@ die() {
   exit "$code"
 }
 
+version() {
+  cat <<EOF
+gwt version $VERSION
+EOF
+
+  exit 0
+}
+
 usage() {
   cat <<EOF
 Script adds/removes a git worktree and the branch associated with the tree.
@@ -65,6 +74,7 @@ This script performs the following steps:
   1. Create a new worktree, based off the base branch (default: main)
   2. Install dependencies
 EOF
+
   exit 0
 }
 
@@ -112,6 +122,10 @@ parseParams() {
       -r | --remove)
         shift
         removeWorktree $@
+        ;;
+
+      -v | --version)
+        version
         ;;
 
       -?*)
