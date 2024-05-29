@@ -1,8 +1,7 @@
 # gwt NPM Package
 
-This package can be used by:
+This package can be installed by:
 
 ```
-npm install -g @bojangles/gwt
-npx gwt-create
+npx @bojangles/gwt
 ```
