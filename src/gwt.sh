@@ -65,7 +65,8 @@ Commands:
   remove      Remove one or more images
 
 Available options:
-  -h, --help                    Print this help and exit
+  -h, --help                    Print this help
+  -v, --version                 Print the version of the app
   -b, --branch                  The branch to create
   -r, --remove                  Remove only worktree
   -rf, -fr                      Remove worktree and the branch

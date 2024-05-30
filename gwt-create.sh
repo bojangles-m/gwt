@@ -1,5 +1,7 @@
 #!/bin/bash
 
+printNL() { echo >&2 -e "${1-}"; }
+
 getSourceDir() {
   local source=${BASH_SOURCE[0]}
   while [ -L "$source" ]; do # resolve $source until the file is no longer a symlink
@@ -14,9 +16,7 @@ getSourceDir() {
 GREEN='\033[0;32m'
 NOFORMAT='\033[0m'
 
-GWT_DIR=$(getSourceDir)
-
-printNL() { echo >&2 -e "${1-}"; }
+GWT_DIR=`getSourceDir`
 
 mkdir -p ~/.gwt && cp $GWT_DIR/src/* "$_"
 sudo ln -sf ~/.gwt/gwt.sh /usr/local/bin/gwt
