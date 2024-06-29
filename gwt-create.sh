@@ -18,6 +18,9 @@ NOFORMAT='\033[0m'
 
 GWT_DIR=`getSourceDir`
 
+VERSION=$(cat $GWT_DIR/package.json | grep version | awk '{print $2}' | sed 's/[ ",]//g')
+echo $VERSION > $GWT_DIR/src/VERSION
+
 mkdir -p ~/.gwt && cp $GWT_DIR/src/* "$_"
 sudo ln -sf ~/.gwt/gwt.sh /usr/local/bin/gwt
 
