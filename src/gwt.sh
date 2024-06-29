@@ -20,7 +20,6 @@ REMOVE_BRANCH=false
 PROGRAM=$(basename "${BASH_SOURCE[0]}")
 SOURCE_DIR=$(getSourceDir)
 
-# source $SOURCE_DIR/version.sh
 source $SOURCE_DIR/spinner.sh
 
 runCommand() {
