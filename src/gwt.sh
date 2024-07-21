@@ -11,39 +11,26 @@ getSourceDir() {
   echo $( cd -P "$( dirname "$source" )" >/dev/null 2>&1 && pwd )
 }
 
+getCurentDirName() {
+  local pathIn=$(pwd)
+  local folders=(${pathIn//\// })
+  local lastElementIndex=${#folders[@]}-1
+  local currentFolderName=${folders[$lastElementIndex]}  
+  echo $currentFolderName
+}
+
 GRAY='\033[0;90m'
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NOFORMAT='\033[0m'
 
+CURRENT_DIR_NAME=$(getCurentDirName)
+WORKTREE_DIR=~/.gwt/worktree
 REMOVE_BRANCH=false
 PROGRAM=$(basename "${BASH_SOURCE[0]}")
 SOURCE_DIR=$(getSourceDir)
 
 source $SOURCE_DIR/spinner.sh
-
-runCommand() {
-  local message=$1
-  shift
-  print "$message "
-  "$@" &>/dev/null &
-  spinner
-
-  [[ $? -eq 0 ]] && success "Done." || error "FAILED."
-}
-
-print() { echo >&2 -ne "${1-}"; }
-printNL() { echo >&2 -e "${1-}"; }
-msg() { printNL "${GRAY}${1-}${NOFORMAT}"; }
-success() { msg "${GREEN}${1-}${NOFORMAT}"; }
-error() { msg "${RED}${1-}${NOFORMAT}"; exit 1; }
-die() {
-  local msg=$1
-  local code=${2-1} # default exit status 1
-  printNL "$msg"
-  printNL "See '${PROGRAM} --help'."
-  exit "$code"
-}
 
 version() {
   local VERSION=$(cat $SOURCE_DIR/VERSION)
@@ -59,7 +46,8 @@ usage() {
   cat <<EOF
 Script adds/removes a git worktree and the branch associated with the tree.
 
-Usage:  ${PROGRAM} [OPTIONS] COMMAND <worktree-path> 
+Usage:    $PROGRAM [OPTIONS]
+          $PROGRAM COMMAND [OPTIONS] <worktree-path> 
 
 Commands:
   add         Create and run a new container from an image
@@ -68,9 +56,8 @@ Commands:
 Available options:
   -h, --help                    Print this help
   -v, --version                 Print the version of the app
-  -b, --branch                  The branch to create
-  -r, --remove                  Remove only worktree
-  -rf, -fr                      Remove worktree and the branch
+  -a                            Remove worktree with the branch
+  -i                            Installation of dependencies of the newly created worktree
 
 This script performs the following steps:
   1. Create a new worktree, based off the base branch (default: main)
@@ -80,50 +67,108 @@ EOF
   exit 0
 }
 
-restOfParams() {
-  SOURCE='origin/main'
-  WORKTREE=("$@")
+print() { echo >&2 -ne "${1-}"; }
+printNL() { echo >&2 -e "${1-}"; }
+msg() { printNL "${GRAY}${1-}${NOFORMAT}"; }
+success() { msg "${GREEN}${1-}${NOFORMAT}"; }
+error() { msg "${RED}${1-}${NOFORMAT}"; exit 1; }
+die() {
+  local msg=$1
+  local code=${2-1} # default exit status 1
+  printNL "$msg"
+  exit "$code"
+}
+diePrinthHelp() {
+  local msg=$1
+  local code=${2-1} # default exit status 1
+  printNL "$msg"
+  printNL "See '${PROGRAM} --help'."
+  exit "$code"
+}
 
-  # check if worktree params exist
-  [[ -z "${WORKTREE}" ]] && die "Missing worktree path";
+runCommand() {
+  local message=$1
+  shift
+  print "$message "
+  "$@" &>/dev/null &
+  spinner
 
-  return 0
+  [[ $? -eq 0 ]] && success "Done." || error "FAILED."
 }
 
 removeWorktree() {
-  local BRANCH=("$@")
-  local WORKTREE=$(git worktree list | grep "\[${BRANCH}\]" | awk '{print $1}')
+  local removeBranch=false
 
-  runCommand "Removing worktree: $WORKTREE" git worktree remove $WORKTREE
+  case $1 in
+    -a)
+      removeBranch=true
+      shift
+      ;;
+  esac
+  
+  local branch=$1
 
-  [[ "${REMOVE_BRANCH}" = true ]] && runCommand "Removing branch: $BRANCH" git branch -D $BRANCH
+  local worktree=$(git worktree list | grep "\[${branch}\]" | awk '{print $1}')
+
+  runCommand "Removing worktree: $worktree" git worktree remove $worktree
+
+  [[ $removeBranch = true ]] && runCommand "Removing branch: $branch" git branch -D $branch
+
+  exit 0
+}
+
+addWorktree() {
+  local installDependencies=false
+
+  case $1 in
+    -i)
+      installDependencies=true
+      shift
+      ;;
+  esac
+
+  local source=$1
+  local branch=$2
+  local worktree=$WORKTREE_DIR/$(getCurentDirName)_${source//[^A-Za-z0-9]/-}
+
+  [[ -z $source ]] && die "Missing source brnach name";
+
+  if [ ! -z $branch ]; then
+    runCommand "Generating worktree: $worktree" git worktree add -b $branch $worktree $source
+  else
+    runCommand "Generating worktree ($worktree) from branch: $source" git worktree add $worktree $source
+  fi
+
+  if [ $installDependencies = true ]; then
+    # msg "Moving into worktree: $worktree"
+    cd $worktree
+    runCommand "Installing dependencies" pnpm --silent install
+  fi
 
   exit 0
 }
 
 parseParams() {
-  BRANCH=''
-
   while :; do
     case "${1-}" in
-      -h | --help) 
-        usage
+      list)
+        msg "Existing worktrees with branches:"
+        git worktree list
+        exit 0
         ;;
-
-      -b | --branch)
-        BRANCH=$2
+      
+      add)
         shift
+        addWorktree $@
         ;;
 
-      -rf | -fr)
-        shift
-        REMOVE_BRANCH=true
-        removeWorktree $@ 
-        ;;
-
-      -r | --remove)
+      remove)
         shift
         removeWorktree $@
+        ;;
+
+      -h | --help) 
+        usage
         ;;
 
       -v | --version)
@@ -131,34 +176,19 @@ parseParams() {
         ;;
 
       -?*)
-        die "Unknown or missing command/option: $1"
+        diePrinthHelp "Unknown or missing command/option: $1"
         ;;
-
+  
       *) 
-        break
+        diePrinthHelp "Missing command."
         ;;
     esac
     shift
   done
-
-  # die if branch is missing
-  [[ -z "$BRANCH" ]] && die "Missing branch name";
-
-  restOfParams $@
 
   return 0
 }
 
 parseParams $@
 
-# check if branch already exists
-if [ -n "$(git branch --list "$BRANCH")" ]; then
-  runCommand "Generating worktree ($WORKTREE) from existing branch: $BRANCH" git worktree add $WORKTREE $BRANCH
-else 
-  runCommand "Generating worktree: $WORKTREE" git worktree add -b $BRANCH $WORKTREE $SOURCE
-fi
-
-msg "Moving into worktree: $WORKTREE"
-cd $WORKTREE
-runCommand "Installing dependencies" pnpm --silent install
 success "Success."
