@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Stop execution on any error
+# set -e
+
 getSourceDir() {
   local source=${BASH_SOURCE[0]}
   while [ -L "$source" ]; do # resolve $source until the file is no longer a symlink
@@ -22,6 +25,7 @@ getCurentDirName() {
 GRAY='\033[0;90m'
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
 NOFORMAT='\033[0m'
 
 CURRENT_DIR_NAME=$(getCurentDirName)
@@ -71,7 +75,7 @@ print() { echo >&2 -ne "${1-}"; }
 printNL() { echo >&2 -e "${1-}"; }
 msg() { printNL "${GRAY}${1-}${NOFORMAT}"; }
 success() { msg "${GREEN}${1-}${NOFORMAT}"; }
-error() { msg "${RED}${1-}${NOFORMAT}"; exit 1; }
+error() { msg "\n${RED}${1}${NOFORMAT}\n${YELLOW}${2-}${NOFORMAT}"; exit 1; }
 die() {
   local msg=$1
   local code=${2-1} # default exit status 1
@@ -87,14 +91,15 @@ diePrinthHelp() {
 }
 
 runCommand() {
-  local message=$1
-  local code=$2
+  local errCode=$1
+  local message=$2
   shift 2
   print "$message "
-  "$@" &>/dev/null &
-  spinner
 
-  [[ $? -eq 0 ]] && success "Done." || error "FAILED:$code."
+  errMessage="$($@ 2>&1)"
+
+  # The $? character is an exit status variable which stores the exit code of the previous command.
+  [[ $? -eq 0 ]] && success "Done." || error "ERROR:[$errCode]" "$errMessage"
 }
 
 removeWorktree() {
@@ -111,9 +116,9 @@ removeWorktree() {
 
   local worktree=$(git worktree list | grep "\[${branch}\]" | awk '{print $1}')
 
-  runCommand "Removing worktree: $worktree" "[1010]" git worktree remove $worktree
+  (runCommand "1010" "Removing worktree: $worktree" git worktree remove $worktree) & spinner
 
-  [[ $removeBranch = true ]] && runCommand "Removing branch: $branch" "[1011]" git branch -D $branch
+  [[ $removeBranch = true ]] && runCommand "1011" "Removing branch: $branch" git branch -D $branch
 
   exit 0
 }
@@ -135,15 +140,15 @@ addWorktree() {
   [[ -z $source ]] && die "Missing source brnach name";
 
   if [ ! -z $branch ]; then
-    runCommand "Generating worktree: $worktree" "[1001]" git worktree add -b $branch $worktree $source
+    (runCommand "1001" "Generating worktree: $worktree" git worktree add -b $branch $worktree $source) & spinner
   else
-    runCommand "Generating worktree ($worktree) from branch: $source" "[1002]" git worktree add $worktree $source
+    (runCommand "1002" "Generating worktree ($worktree) from branch: $source" git worktree add $worktree $source) & spinner
   fi
 
   if [ $installDependencies = true ]; then
     # msg "Moving into worktree: $worktree"
     cd $worktree
-    runCommand "Installing dependencies" "[1003]" pnpm --silent install
+    (runCommand "1003" "Installing dependencies" pnpm --silent install) & spinner
   fi
 
   exit 0
