@@ -88,12 +88,13 @@ diePrinthHelp() {
 
 runCommand() {
   local message=$1
-  shift
+  local code=$2
+  shift 2
   print "$message "
   "$@" &>/dev/null &
   spinner
 
-  [[ $? -eq 0 ]] && success "Done." || error "FAILED."
+  [[ $? -eq 0 ]] && success "Done." || error "FAILED:$code."
 }
 
 removeWorktree() {
@@ -110,9 +111,9 @@ removeWorktree() {
 
   local worktree=$(git worktree list | grep "\[${branch}\]" | awk '{print $1}')
 
-  runCommand "Removing worktree: $worktree" git worktree remove $worktree
+  runCommand "Removing worktree: $worktree" "[1010]" git worktree remove $worktree
 
-  [[ $removeBranch = true ]] && runCommand "Removing branch: $branch" git branch -D $branch
+  [[ $removeBranch = true ]] && runCommand "Removing branch: $branch" "[1011]" git branch -D $branch
 
   exit 0
 }
@@ -134,15 +135,15 @@ addWorktree() {
   [[ -z $source ]] && die "Missing source brnach name";
 
   if [ ! -z $branch ]; then
-    runCommand "Generating worktree: $worktree" git worktree add -b $branch $worktree $source
+    runCommand "Generating worktree: $worktree" "[1001]" git worktree add -b $branch $worktree $source
   else
-    runCommand "Generating worktree ($worktree) from branch: $source" git worktree add $worktree $source
+    runCommand "Generating worktree ($worktree) from branch: $source" "[1002]" git worktree add $worktree $source
   fi
 
   if [ $installDependencies = true ]; then
     # msg "Moving into worktree: $worktree"
     cd $worktree
-    runCommand "Installing dependencies" pnpm --silent install
+    runCommand "Installing dependencies" "[1003]" pnpm --silent install
   fi
 
   exit 0
