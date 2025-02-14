@@ -14,7 +14,7 @@ getSourceDir() {
   echo $( cd -P "$( dirname "$source" )" >/dev/null 2>&1 && pwd )
 }
 
-getCurentDirName() {
+getCurrentDirName() {
   local pathIn=$(pwd)
   local folders=(${pathIn//\// })
   local lastElementIndex=${#folders[@]}-1
@@ -26,9 +26,9 @@ GRAY='\033[0;90m'
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
-NOFORMAT='\033[0m'
+CLEAR_FORMAT='\033[0m'
 
-CURRENT_DIR_NAME=$(getCurentDirName)
+CURRENT_DIR_NAME=$(getCurrentDirName)
 WORKTREE_DIR=~/.gwt/worktree
 REMOVE_BRANCH=false
 PROGRAM=$(basename "${BASH_SOURCE[0]}")
@@ -48,10 +48,10 @@ EOF
 
 usage() {
   cat <<EOF
-Script adds/removes a git worktree and the branch associated with the tree.
+Script adds/removes a git work tree and the branch associated with the tree.
 
 Usage:    $PROGRAM [OPTIONS]
-          $PROGRAM COMMAND [OPTIONS] <worktree-path> 
+          $PROGRAM COMMAND [OPTIONS] <work-tree-path> 
 
 Commands:
   add         Create and run a new container from an image
@@ -60,11 +60,11 @@ Commands:
 Available options:
   -h, --help                    Print this help
   -v, --version                 Print the version of the app
-  -a                            Remove worktree with the branch
-  -i                            Installation of dependencies of the newly created worktree
+  -a                            Remove work tree with the branch
+  -i                            Installation of dependencies of the newly created work tree
 
 This script performs the following steps:
-  1. Create a new worktree, based off the base branch (default: main)
+  1. Create a new work tree, based off the base branch (default: main)
   2. Install dependencies
 EOF
 
@@ -73,16 +73,16 @@ EOF
 
 print() { echo >&2 -ne "${1-}"; }
 printNL() { echo >&2 -e "${1-}"; }
-msg() { printNL "${GRAY}${1-}${NOFORMAT}"; }
-success() { msg "${GREEN}${1-}${NOFORMAT}"; }
-error() { msg "\n${RED}${1}${NOFORMAT}\n${YELLOW}${2-}${NOFORMAT}"; exit 1; }
+msg() { printNL "${GRAY}${1-}${CLEAR_FORMAT}"; }
+success() { msg "${GREEN}${1-}${CLEAR_FORMAT}"; }
+error() { msg "\n${RED}${1}${CLEAR_FORMAT}\n${YELLOW}${2-}${CLEAR_FORMAT}"; exit 1; }
 die() {
   local msg=$1
   local code=${2-1} # default exit status 1
   printNL "$msg"
   exit "$code"
 }
-diePrinthHelp() {
+diePrintHelp() {
   local msg=$1
   local code=${2-1} # default exit status 1
   printNL "$msg"
@@ -102,7 +102,7 @@ runCommand() {
   [[ $? -eq 0 ]] && success "Done." || error "ERROR:[$errCode]" "$errMessage"
 }
 
-removeWorktree() {
+removeWorkTree() {
   local removeBranch=false
 
   case $1 in
@@ -135,9 +135,9 @@ addWorktree() {
 
   local source=$1
   local branch=$2
-  local worktree=$WORKTREE_DIR/$(getCurentDirName)_${source//[^A-Za-z0-9]/-}
+  local worktree=$WORKTREE_DIR/$(getCurrentDirName)_${source//[^A-Za-z0-9]/-}
 
-  [[ -z $source ]] && die "Missing source brnach name";
+  [[ -z $source ]] && die "Missing source branch name";
 
   if [ ! -z $branch ]; then
     (runCommand "1001" "Generating worktree: $worktree" git worktree add -b $branch $worktree $source) & spinner
@@ -158,7 +158,7 @@ parseParams() {
   while :; do
     case "${1-}" in
       list)
-        msg "Existing worktrees with branches:"
+        msg "Existing worktree with branches:"
         git worktree list
         exit 0
         ;;
@@ -170,7 +170,7 @@ parseParams() {
 
       remove)
         shift
-        removeWorktree $@
+        removeWorkTree $@
         ;;
 
       -h | --help) 
@@ -182,11 +182,11 @@ parseParams() {
         ;;
 
       -?*)
-        diePrinthHelp "Unknown or missing command/option: $1"
+        diePrintHelp "Unknown or missing command/option: $1"
         ;;
   
       *) 
-        diePrinthHelp "Missing command."
+        diePrintHelp "Missing command."
         ;;
     esac
     shift
