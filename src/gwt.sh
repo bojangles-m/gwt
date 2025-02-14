@@ -48,7 +48,7 @@ EOF
 
 usage() {
   cat <<EOF
-Script adds/removes a git worktree and the branch associated with the tree.
+The script manages a Git worktree by adding or removing it along with its associated branch.
 
 Usage:    $PROGRAM [OPTIONS]
           $PROGRAM COMMAND [OPTIONS] <worktree-path> 
@@ -64,8 +64,8 @@ Available options:
   -i                            Installation of dependencies of the newly created worktree
 
 This script performs the following steps:
-  1. Create a new worktree, based off the base branch (default: main)
-  2. Install dependencies
+  1. Creates a new worktree based on the base branch (default: main)
+  2. Installs dependencies
 EOF
 
   exit 0
