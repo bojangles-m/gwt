@@ -7,65 +7,42 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **Jump straight into a new worktree.** `gwa -s` (`--switch`) creates or adopts a worktree and drops you right into it (`cd`), in one step. Plain `gwa` still leaves your shell where it is.
 
 ## [1.1.6] — 2026-07-22
 
 ### Added
-- **Fast worktree removal.** `gwr` and `gwclean` now move a worktree to the Trash
-  instead of a slow recursive delete — near-instant on large worktrees (e.g. a
-  `node_modules`), and recoverable. Controlled by the new **`GWT_TRASH_CMD`** knob,
-  which auto-detects the `trash` tool; set it to `trash-put` / `gio trash`, or to
-  `''` to force the native remove. Falls back to native `git worktree remove` when
-  no trash tool is present or if trashing fails.
-- **Removal progress.** A per-worktree spinner (`⠹ removing <branch>…`) that
-  resolves in place to `✓ removed <branch>`, so a slow removal never looks frozen.
-  The on-screen behavior is identical whether it trashed or removed natively.
-- `GWT_TRASH_CMD` is reported by `gwt doctor` (optional; its absence is never a failure).
+- **Removing worktrees is now near-instant.** `gwr` and `gwclean` move a worktree to the Trash instead of slowly deleting every file — a huge difference on worktrees with a big `node_modules`. Bonus: it's recoverable, so you can restore from the Trash if you change your mind.
+- **You can see it working.** A little spinner shows `removing <branch>…` and turns into `✓ removed <branch>` when it's done, so a large removal never looks frozen.
+- **Use your own trash tool.** `trash` is picked up automatically if it's installed; set `GWT_TRASH_CMD` to use a different one (e.g. `trash-put`, `gio trash`), or to nothing to keep the plain git removal. `gwt doctor` shows which one is active.
 
 ### Changed
-- Safety is unchanged: a worktree with real uncommitted changes still refuses to be
-  removed, and an explicit `--force` still goes straight to git.
+- Nothing about safety changed: a worktree with real uncommitted changes is still never removed unless you pass `--force`.
 
 ## [1.1.5] — 2026-07-22
 
 ### Added
-- **`GWT_CLIPBOARD_CMD`** — the clipboard command used by `gwa -c` is now
-  configurable (default `pbcopy`). Linux users can set `xclip -selection clipboard`
-  or `wl-copy`. Reported by `gwt doctor`.
+- **Choose your clipboard tool.** The command behind `gwa -c` is now configurable via `GWT_CLIPBOARD_CMD` — `pbcopy` on macOS by default, or set `xclip` / `wl-copy` on Linux. Shown in `gwt doctor`.
 
 ## [1.1.4] — 2026-07-22
 
 ### Changed
-- **`gwt update`** now checks the latest published version first (with a spinner) and
-  reports `✓ you have the latest version` when you're already current, instead of
-  always re-running the installer. The `-v`/`--verbose` flag was removed — the
-  installer's output (including any prompt) is always shown.
+- **`gwt update` got smarter.** It now checks for a newer version first and simply tells you `✓ you have the latest version` when you're already current, instead of reinstalling every time. (The `-v` flag was removed — the installer's own output is always shown now.)
 
 ### Fixed
-- `gwt update` no longer prints its "updated to …" confirmation twice.
+- **`gwt update` no longer reports the update twice** — you get a single `updated to …` confirmation.
 
 ## [1.1.2] — 2026-07-22
 
-First public release as **`@bojangles/gwt`** — extracted from a personal dotfiles
-setup into a standalone, `npx`-installable zsh plugin.
+First public release as **`@bojangles/gwt`** — the git-worktree toolkit, lifted out of a
+personal dotfiles setup into a standalone tool anyone can install in one command.
 
 ### Added
-- **One-command install:** `npx @bojangles/gwt` — no sudo, nothing system-wide.
-  Copies the plugin to `~/.gwt/gwt.zsh` and adds a single `source` line to `~/.zshrc`;
-  re-running upgrades in place without duplicating that line.
-- **Worktree commands:** `gwa` (create/adopt a worktree — `-c`/`-o`/`-m`, or an fzf
-  picker to adopt an existing branch or type a new one), `gws` (switch/`cd`),
-  `gwo` (open in editor), `gwr` (remove — `-d`/`-D`, multi-select picker),
-  `gwl` (status dashboard — `-a` all repos, `-p` paths), `gwclean` (remove stale
-  worktrees), `gwp` (prune).
-- **Meta-commands that work from anywhere:** `gwt` / `gwt -h` / `gwt -v`,
-  `gwt doctor` (required + optional dependency checks and effective config),
-  `gwt update`, `gwt uninstall`.
-- **Configuration:** `GWT_WORKTREE_DIR`, `GWT_OPEN_CMD`, `GWT_COPY_FILES`,
-  `GWT_POST_INIT_CMD`, `GWT_PICKER_OPTIONS`.
-- Version reported by the tool is stamped from a single source (`package.json`) at
-  install time; a from-source/dev build reports `0.0.0-dev`.
+- **One-command install.** `npx @bojangles/gwt` — no `sudo`, nothing system-wide. Re-run it anytime to upgrade.
+- **The worktree commands.** `gwa` (create/adopt), `gws` (switch), `gwo` (open in your editor), `gwr` (remove), `gwl` (status dashboard), `gwclean` (tidy up stale worktrees), and `gwp` (prune). When you don't name a branch, an fzf picker helps you choose one.
+- **Helpers that work from anywhere.** `gwt doctor` checks your setup, plus `gwt update`, `gwt uninstall`, and `gwt -h` / `-v`.
+- **Sensible, adjustable defaults.** Set where worktrees live, how they open, which files are copied into each new one, and a command to run right after creating one.
 
 ---
 

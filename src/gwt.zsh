@@ -84,12 +84,12 @@ EOF
 function _gwt_help() {
     cat <<EOF
 Usage:
-  gwa [-c | -o] [-m] [<branch>] [<start-point>]
+  gwa [-c | -o | -s] [-m] [<branch>] [<start-point>]
       Create a new worktree. No <branch>: fzf picker — pick an existing branch to adopt,
       or type a new name and press enter to create it.
           -c    Copy the "open" command to the clipboard (default)
-          -o    Open the worktree in your editor
-                (both use \$GWT_OPEN_CMD — VS Code by default)
+          -o    Open the worktree in your editor (\$GWT_OPEN_CMD — VS Code by default)
+          -s    Switch into the new worktree (cd)
           -m    Base a NEW branch on the local default branch (main) instead of the
                 current HEAD. --from-main. Ignored if <branch> already exists.
 
@@ -345,15 +345,16 @@ function _gwt_uninstall() {
 }
 
 # Worktree at $GWT_WORKTREE_DIR/<repo>/<branch>
-# gwa [-c | -o] [-m] [<branch>] [<start-point>]
+# gwa [-c | -o | -s] [-m] [<branch>] [<start-point>]
 #   -c : copy the open-command ($GWT_OPEN_CMD) to the clipboard (default)
 #   -o : open the new worktree via $GWT_OPEN_CMD
+#   -s : switch into the new worktree (cd)
 #   -m : base a NEW branch on the local default branch instead of HEAD (--from-main)
 # With no <branch>: fzf picker — adopt an existing branch, or type a new name to create it.
 function gwa() {
     _gwt_require_repo || return 1
     local -a flags pos
-    local action="copy"                      # default; add more flags below
+    local action="copy"                      # default; -c/-o/-s pick the post-create action
     local from_main=""
     _gwt_split_args "$@"
     local f
@@ -361,6 +362,7 @@ function gwa() {
         case "$f" in
             -c) action="copy" ;;
             -o) action="open" ;;
+            -s|--switch) action="switch" ;;
             -m|--from-main) from_main=1 ;;
             *)  _gwt_error "unknown flag: $f"; return 1 ;;
         esac
@@ -380,7 +382,7 @@ function gwa() {
             branch="$(_gwt_pick_branch)" || { [[ $? == 130 ]] && print -z -- "${0}${flags:+ $flags} "; return 0; }   # ESC -> reinject cmd
             [[ -z "$branch" ]] && return 0
         else
-            _gwt_error "usage: [-c|-o] <branch> [<start-point>]"
+            _gwt_error "usage: [-c|-o|-s] <branch> [<start-point>]"
             return 1
         fi
     fi
@@ -394,10 +396,12 @@ function gwa() {
     if [[ -n "$existing" ]]; then
         _GWT_LAST="$existing"
         case "$action" in
-            open) _gwt_info "'$branch' already has a worktree at $existing — opening it"
-                  _gwt_open "$existing" ;;
-            copy) _gwt_info "'$branch' already has a worktree at $existing"
-                  _gwt_copy "$existing" ;;
+            open)   _gwt_info "'$branch' already has a worktree at $existing — opening it"
+                    _gwt_open "$existing" ;;
+            switch) _gwt_info "'$branch' already has a worktree at $existing — switching to it"
+                    cd "$existing" ;;
+            copy)   _gwt_info "'$branch' already has a worktree at $existing"
+                    _gwt_copy "$existing" ;;
         esac
         return 0
     fi
@@ -421,8 +425,9 @@ function gwa() {
     fi
 
     case "$action" in
-        copy) _gwt_copy "$wt" ;;
-        open) _gwt_open "$wt" ;;
+        copy)   _gwt_copy "$wt" ;;
+        open)   _gwt_open "$wt" ;;
+        switch) cd "$wt" ;;
     esac
 }
 

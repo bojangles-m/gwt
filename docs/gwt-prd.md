@@ -66,6 +66,7 @@ As a developer, I want to control what a new branch is based on and what happens
 **Acceptance Criteria**
 - `-o` opens the new (or existing) worktree in the editor after creation.
 - `-c` (the default) copies a ready-to-run "open" command for the worktree to the clipboard instead of opening it.
+- `-s` switches the current shell into the new (or existing) worktree (`cd`) instead of copying or opening. `-c`, `-o`, and `-s` are mutually exclusive; without `-s` the shell stays where it is.
 - `-m` (alias `--from-main`) bases a **new** branch on the local **default branch** instead of the current HEAD.
 - `-m` combined with an explicit start-point is rejected with a clear error.
 - `-m` when the default branch can't be determined, or when there is no local branch of that name, fails with a clear, actionable error (e.g. telling the user to fetch/checkout it first).
@@ -265,7 +266,7 @@ As a user who can't or won't use the one-command installer, I want a documented 
 - **FR-6** A second positional argument is the start-point for a newly created branch.
 - **FR-7** `-m`/`--from-main` bases a new branch on the local default branch; it conflicts with an explicit start-point (error), and fails clearly when the default branch is undeterminable or absent locally.
 - **FR-8** If the target branch already has a worktree, `gwa` reports the existing path and performs the post-action there instead of failing.
-- **FR-9** After creation, `gwa` seeds `GWT_COPY_FILES` (FR-19), runs `GWT_POST_INIT_CMD` if set (FR-20), records the worktree as the session-last, prints the worktree path (and, for a new branch, the base it was cut from), then performs the post-action: `-c` copy an open-command to the clipboard (default), or `-o` open in the editor.
+- **FR-9** After creation, `gwa` seeds `GWT_COPY_FILES` (FR-19), runs `GWT_POST_INIT_CMD` if set (FR-20), records the worktree as the session-last, prints the worktree path (and, for a new branch, the base it was cut from), then performs the post-action: `-c` copy an open-command to the clipboard (default), `-o` open in the editor, or `-s` switch the shell into it (`cd`). Without `-s` the shell does not change directory.
 - **FR-10** With no branch name: if the picker is available, show branches without a worktree (local + remote-only, de-duplicated, newest-first) and allow adopt-highlighted or create-typed; if not, print a usage error. Aborting re-injects the command line and changes nothing.
 
 **`gws` / `gwo` — switch / open**

@@ -95,9 +95,10 @@ Symlinks `~/.gwt/gwt.zsh` → the clone's `src/gwt.zsh` (not a copy) and ensures
 
 ### B.2 `gwa` — create/adopt
 
-- Flags: `-c` copy (default action), `-o` open, `-m`/`--from-main` base a new branch on the local default branch. `-m` + explicit start-point → error; `-m` resolves start-point to `${$(_gwt_default_branch)#origin/}`, erroring if undeterminable or no local `refs/heads/<sp>`.
+- Flags: `-c` copy (default action), `-o` open, `-s`/`--switch` cd into the new worktree, `-m`/`--from-main` base a new branch on the local default branch. `-c`/`-o`/`-s` all set the mutually-exclusive `action`; `-m` is orthogonal. `-m` + explicit start-point → error; `-m` resolves start-point to `${$(_gwt_default_branch)#origin/}`, erroring if undeterminable or no local `refs/heads/<sp>`.
 - No branch → picker (`_gwt_pick_branch`) if `_gwt_is_picker_available`, else usage error. ESC (rc 130) → `print -z` reinject; empty → return 0.
-- Existing worktree for the branch → reuse (no fail): set `_GWT_LAST`, do the action (open/copy), return.
+- Existing worktree for the branch → reuse (no fail): set `_GWT_LAST`, do the action (open/copy/switch→`cd`), return.
+- Post-create action (also the reuse path): `copy` → `_gwt_copy`; `open` → `_gwt_open`; `switch` → `cd "$wt"` (gwa is a function, so it can cd the caller's shell). Default stays put.
 - **`_gwt_create_worktree <branch> [start-point]`** routes:
   - local `refs/heads/<branch>` exists → `git worktree add <wt> <branch>` (adopt).
   - else `refs/remotes/origin/<branch>` exists → note it, `git worktree add --track -b <branch> <wt> origin/<branch>`.
