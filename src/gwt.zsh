@@ -52,6 +52,13 @@ if (( ! ${+GWT_TRASH_CMD} )); then
 fi
 
 # ---------------------------------------------------------------------------
+# Refresh origin before the `gwa` picker / name lookup, so the other branch 
+# from origin shows up. 
+# Shell control: export GWT_GWA_FETCH=0 (1 = on (default), 0 = off)
+# ---------------------------------------------------------------------------
+: ${GWT_GWA_FETCH:=1}
+
+# ---------------------------------------------------------------------------
 # Public commands
 # ---------------------------------------------------------------------------
 
@@ -84,7 +91,7 @@ EOF
 function _gwt_help() {
     cat <<EOF
 Usage:
-  gwa [-c | -o | -s] [-m] [<branch>] [<start-point>]
+  gwa [-c | -o | -s] [-m] [--no-fetch] [<branch>] [<start-point>]
       Create a new worktree. No <branch>: fzf picker — pick an existing branch to adopt,
       or type a new name and press enter to create it.
           -c    Copy the "open" command to the clipboard (default)
@@ -92,6 +99,7 @@ Usage:
           -s    Switch into the new worktree (cd)
           -m    Base a NEW branch on the local default branch (main) instead of the
                 current HEAD. --from-main. Ignored if <branch> already exists.
+          --no-fetch  Skip the origin refresh for this run (see GWT_GWA_FETCH)
 
   gwo [<branch>]                    Open a worktree in your editor. No <branch>: fzf picker (else the most recent).
   gws [-o] [<branch>]               Switch to a worktree (cd). No <branch>: fzf picker; -o also opens it in your editor.
@@ -140,6 +148,8 @@ Configuration:
                                     e.g.  export GWT_PICKER_OPTIONS='--height=60% --preview-window=down'
         GWT_TRASH_CMD               command to trash a path — fast gwr/gwclean (auto-detects \`trash\`)
                                     e.g.  export GWT_TRASH_CMD='trash-put'   # or '' to force native
+        GWT_GWA_FETCH               refresh origin before the gwa picker/lookup (1=on default, 0=off)
+                                    e.g.  export GWT_GWA_FETCH=0             # or per-run: gwa --no-fetch
 EOF
 }
 
@@ -242,7 +252,8 @@ function _gwt_doctor() {
         "  GWT_COPY_FILES      ${GWT_COPY_FILES[*]:-<none>}" \
         "  GWT_POST_INIT_CMD   ${GWT_POST_INIT_CMD:-<none>}" \
         "  GWT_PICKER_OPTIONS  ${GWT_PICKER_OPTIONS:-<none>}" \
-        "  GWT_TRASH_CMD       ${GWT_TRASH_CMD:-<none>}"
+        "  GWT_TRASH_CMD       ${GWT_TRASH_CMD:-<none>}" \
+        "  GWT_GWA_FETCH       ${GWT_GWA_FETCH:-<unset>}"
 
     # --- Context (informational only; never a required failure) ---
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -344,18 +355,33 @@ function _gwt_uninstall() {
     _gwt_info "✓ gwt uninstalled. The commands stay in this shell until you restart it."
 }
 
+# Refresh origin so the gwa picker / name lookup see current branches. Non-blocking:
+# no `origin` remote → skip silently; a failed fetch (offline) → warn and carry on.
+function _gwt_refresh_origin() {
+    git remote get-url origin >/dev/null 2>&1 || return 0   # no origin → nothing to refresh
+    local tmp
+    setopt local_options no_monitor
+    tmp="$(mktemp "${TMPDIR:-/tmp}/gwt-fetch.XXXXXX")" || return 0
+    git fetch --prune origin >"$tmp" 2>&1 &
+    _gwt_spin $! "refreshing from origin…"
+    (( $? )) && _gwt_warn "couldn't refresh from origin (offline?) — using last-known"
+    rm -f "$tmp"
+    return 0
+}
+
 # Worktree at $GWT_WORKTREE_DIR/<repo>/<branch>
-# gwa [-c | -o | -s] [-m] [<branch>] [<start-point>]
+# gwa [-c | -o | -s] [-m] [--no-fetch] [<branch>] [<start-point>]
 #   -c : copy the open-command ($GWT_OPEN_CMD) to the clipboard (default)
 #   -o : open the new worktree via $GWT_OPEN_CMD
 #   -s : switch into the new worktree (cd)
 #   -m : base a NEW branch on the local default branch instead of HEAD (--from-main)
+#   --no-fetch : skip the origin refresh for this run (see GWT_GWA_FETCH)
 # With no <branch>: fzf picker — adopt an existing branch, or type a new name to create it.
 function gwa() {
     _gwt_require_repo || return 1
     local -a flags pos
     local action="copy"                      # default; -c/-o/-s pick the post-create action
-    local from_main=""
+    local from_main="" no_fetch=""
     _gwt_split_args "$@"
     local f
     for f in $flags; do
@@ -364,9 +390,12 @@ function gwa() {
             -o) action="open" ;;
             -s|--switch) action="switch" ;;
             -m|--from-main) from_main=1 ;;
+            --no-fetch) no_fetch=1 ;;
             *)  _gwt_error "unknown flag: $f"; return 1 ;;
         esac
     done
+    # Refresh origin by default (GWT_GWA_FETCH); --no-fetch skips it for this run.
+    local do_fetch=""; [[ "$GWT_GWA_FETCH" != 0 && -z "$no_fetch" ]] && do_fetch=1
 
     local branch="${pos[1]}" startpoint="${pos[2]}"
     if [[ -n "$from_main" ]]; then
@@ -379,12 +408,15 @@ function gwa() {
     if [[ -z "$branch" ]]; then
         # No branch given: pick an existing branch that has no worktree yet.
         if _gwt_is_picker_available; then
+            [[ -n "$do_fetch" ]] && _gwt_refresh_origin      # freshen origin/* so the picker is current
             branch="$(_gwt_pick_branch)" || { [[ $? == 130 ]] && print -z -- "${0}${flags:+ $flags} "; return 0; }   # ESC -> reinject cmd
             [[ -z "$branch" ]] && return 0
         else
             _gwt_error "usage: [-c|-o|-s] <branch> [<start-point>]"
             return 1
         fi
+    elif [[ -n "$do_fetch" ]] && ! git show-ref --verify --quiet "refs/heads/$branch"; then
+        _gwt_refresh_origin      # named branch isn't local — freshen so origin/<branch> can be adopted
     fi
 
     local src

@@ -62,7 +62,7 @@ gwclean                  # remove stale (merged / gone-upstream) worktrees
 
 | Command | What it does |
 | --- | --- |
-| `gwa [-c\|-o\|-s] [-m] [<branch>] [<start-point>]` | **Create or adopt a worktree.** No `<branch>` → fzf picker: adopt an existing branch, or type a new name to create it.<br>`-c` — copy the "open" command to the clipboard _(default)_<br>`-o` — open it in your editor<br>`-s` — switch into it (`cd`)<br>`-m` — base a new branch on your default branch (not `HEAD`) |
+| `gwa [-c\|-o\|-s] [-m] [--no-fetch] [<branch>] [<start-point>]` | **Create or adopt a worktree.** No `<branch>` → fzf picker: adopt an existing branch, or type a new name to create it. Refreshes `origin` first so colleagues' branches are current (see `GWT_GWA_FETCH`).<br>`-c` — copy the "open" command to the clipboard _(default)_<br>`-o` — open it in your editor<br>`-s` — switch into it (`cd`)<br>`-m` — base a new branch on your default branch (not `HEAD`)<br>`--no-fetch` — skip the `origin` refresh this run |
 | `gwo [<branch>]` | **Open a worktree** in your editor.<br>No `<branch>` → picker (else the most recent). |
 | `gws [-o] [<branch>]` | **Switch to a worktree** (`cd`). No `<branch>` → picker.<br>`-o` — also open it in your editor |
 | `gwr [-d\|-D] [<branch>] [--force]` | **Remove a worktree.** The branch is kept by default. No `<branch>` → multi-select picker.<br>`-d` — also delete the branch _(safe: refuses if unmerged)_<br>`-D` — also delete the branch _(force)_<br>`--force` — passed straight through to git |
@@ -90,6 +90,7 @@ Set these in your shell (or `~/.zshrc`); `gwt doctor` shows the effective values
 | `GWT_POST_INIT_CMD`  | Command run inside a new worktree after creation            | _(none)_                |
 | `GWT_PICKER_OPTIONS` | Extra fzf options for the pickers                           | _(none)_                |
 | `GWT_TRASH_CMD`      | Command to trash a path → fast `gwr`/`gwclean` (`''`=native) | auto (`trash` if found) |
+| `GWT_GWA_FETCH`      | Refresh `origin` before the `gwa` picker/lookup (`0`=off; per-run `gwa --no-fetch`) | `1` (on)                |
 
 `GWT_COPY_FILES` example for a real project:
 

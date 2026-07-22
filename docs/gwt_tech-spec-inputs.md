@@ -95,7 +95,9 @@ Symlinks `~/.gwt/gwt.zsh` → the clone's `src/gwt.zsh` (not a copy) and ensures
 
 ### B.2 `gwa` — create/adopt
 
-- Flags: `-c` copy (default action), `-o` open, `-s`/`--switch` cd into the new worktree, `-m`/`--from-main` base a new branch on the local default branch. `-c`/`-o`/`-s` all set the mutually-exclusive `action`; `-m` is orthogonal. `-m` + explicit start-point → error; `-m` resolves start-point to `${$(_gwt_default_branch)#origin/}`, erroring if undeterminable or no local `refs/heads/<sp>`.
+- Flags: `-c` copy (default action), `-o` open, `-s`/`--switch` cd into the new worktree, `-m`/`--from-main` base a new branch on the local default branch, `--no-fetch` skip the origin refresh this run. `-c`/`-o`/`-s` all set the mutually-exclusive `action`; `-m`/`--no-fetch` are orthogonal. `-m` + explicit start-point → error; `-m` resolves start-point to `${$(_gwt_default_branch)#origin/}`, erroring if undeterminable or no local `refs/heads/<sp>`.
+- **Origin refresh** (`GWT_GWA_FETCH` default `1`; `--no-fetch` or `=0` disables): `do_fetch=1` when enabled and not `--no-fetch`. Called via **`_gwt_refresh_origin`** — (a) before `_gwt_pick_branch` in the picker path, and (b) in the named path only when `! git show-ref --verify --quiet refs/heads/<branch>` (skip fetch for a local branch). Closes the footgun where an unfetched `origin/<branch>` would otherwise fall through to "create new branch off HEAD."
+- **`_gwt_refresh_origin`**: `git remote get-url origin` fails → return 0 (skip, no remote). Else `git fetch --prune origin` backgrounded (`no_monitor`, output → `mktemp`) with `_gwt_spin $! "refreshing from origin…"`; on non-zero → `_gwt_warn "couldn't refresh from origin (offline?) — using last-known"`. Always returns 0 (non-blocking).
 - No branch → picker (`_gwt_pick_branch`) if `_gwt_is_picker_available`, else usage error. ESC (rc 130) → `print -z` reinject; empty → return 0.
 - Existing worktree for the branch → reuse (no fail): set `_GWT_LAST`, do the action (open/copy/switch→`cd`), return.
 - Post-create action (also the reuse path): `copy` → `_gwt_copy`; `open` → `_gwt_open`; `switch` → `cd "$wt"` (gwa is a function, so it can cd the caller's shell). Default stays put.
@@ -205,6 +207,7 @@ Alias: `git worktree prune`.
 | `GWT_COPY_FILES` | `(.env)` | seeded into new worktrees; excluded from dirty-detection |
 | `GWT_PICKER_OPTIONS` | (empty) | extra fzf options, word-split via `${=…}` |
 | `GWT_TRASH_CMD` | auto (`trash` if on PATH, else `''`) | trashes a path for fast `gwr`/`gwclean`; first word probed with `command -v`, then `eval`'d; `''` forces native remove. Auto-detected only when unset (`(( ! ${+GWT_TRASH_CMD} ))`), so an explicit empty value is respected |
+| `GWT_GWA_FETCH` | `1` (on) | refresh `origin` before the `gwa` picker/lookup so remote branches are current; `0` disables globally, `gwa --no-fetch` per-run. Checked as `!= 0` |
 | `NO_COLOR` | — | any value disables color in `gwl` and messages |
 
 ---
@@ -219,6 +222,7 @@ Alias: `git worktree prune`.
 - **`npm run dev` alias** for `scripts/link.sh`.
 - **Deprecate superseded npm versions = `<1.1.4`** (old `0.1.x` create-tool + interim `1.1.2`).
 - **Fast worktree removal via `GWT_TRASH_CMD`** (auto-detects `trash`): `gwr` clean-path + `gwclean` move-to-trash + `git worktree prune`; native fallback (and on trash failure). Dirty/`--force` stay raw git (safety unchanged). Uniform per-worktree in-place spinner → `✓ removed <name>` for **both** methods.
+- **`gwa` refreshes `origin` by default** (`GWT_GWA_FETCH=1`; `--no-fetch` / `=0` off): fetch before the picker, and before resolving a **non-local** named branch (local branch → no fetch). Non-blocking (offline warns + continues; no origin → silent skip). Fixes the footgun where an unfetched `origin/<branch>` became a wrong new branch. Scope: `gwa` only (`gwo`/`gws`/`gwr` untouched; `gwl` freshness deferred; `gwclean` already fetches).
 
 **Out of scope (this iteration):** package.json `engines` (none); full Linux auto-defaults; cross-repo/global `-g`; Tab-opens-picker.
 

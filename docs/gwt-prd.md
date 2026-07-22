@@ -53,6 +53,7 @@ As a developer, I want one command to spin up a worktree for a branch — new or
 **Acceptance Criteria**
 - `gwa <branch>` creates a worktree at the predictable path for `<branch>` and reports the resulting path.
 - If `<branch>` **exists locally**, the worktree adopts that branch.
+- If `<branch>` is **not already a local branch**, `gwa` first refreshes from `origin` (unless disabled) so a branch that exists only on the remote is found — this prevents the surprise of silently creating a *new* local branch when the name actually exists on `origin`. (A local branch is adopted directly, with no refresh.)
 - If `<branch>` **does not exist locally but exists on `origin`**, the tool announces it is creating from `origin/<branch>` (tracking it) rather than from the current HEAD.
 - If `<branch>` **does not exist anywhere**, a new branch is created from the current HEAD (or from the start-point / default branch — see US-2 options), and the output names the base it was cut from.
 - If `<branch>` **already has a worktree**, the command does not fail: it reports the existing path and performs the chosen post-action (copy or open) against it.
@@ -76,6 +77,7 @@ As a developer, I want to control what a new branch is based on and what happens
 As a developer who doesn't remember the exact branch name, I want a searchable list when I run `gwa` with no name, so that I can adopt an existing branch or type a brand-new one.
 
 **Acceptance Criteria**
+- Before the list is shown, `gwa` **refreshes from `origin`** (unless disabled) so a teammate's newly-pushed or updated branch appears and is current — no manual `git fetch` needed. A brief progress indicator shows during the refresh; if offline it notes it couldn't refresh and shows the last-known list rather than blocking.
 - With no branch name **and** the picker available, `gwa` shows a searchable list of branches that do **not** yet have a worktree — local branches plus `origin/*` branches with no local counterpart, de-duplicated, newest-commit-first, each showing how long ago it was last committed.
 - Highlighting an existing entry and confirming **adopts** that branch.
 - Typing a name that matches nothing and confirming **creates** it as a new branch.
@@ -268,6 +270,7 @@ As a user who can't or won't use the one-command installer, I want a documented 
 - **FR-8** If the target branch already has a worktree, `gwa` reports the existing path and performs the post-action there instead of failing.
 - **FR-9** After creation, `gwa` seeds `GWT_COPY_FILES` (FR-19), runs `GWT_POST_INIT_CMD` if set (FR-20), records the worktree as the session-last, prints the worktree path (and, for a new branch, the base it was cut from), then performs the post-action: `-c` copy an open-command to the clipboard (default), `-o` open in the editor, or `-s` switch the shell into it (`cd`). Without `-s` the shell does not change directory.
 - **FR-10** With no branch name: if the picker is available, show branches without a worktree (local + remote-only, de-duplicated, newest-first) and allow adopt-highlighted or create-typed; if not, print a usage error. Aborting re-injects the command line and changes nothing.
+- **FR-10a** By default `gwa` refreshes `origin` (with a progress indicator) so remote branches are current — before the picker list is built, and before resolving a named branch that is **not** already local (a local branch is adopted without refreshing). The refresh is **non-blocking**: if `origin` is unreachable it warns and proceeds with last-known data; if there is no `origin` remote it is skipped silently. It is on by default, disabled globally by `GWT_GWA_FETCH=0` and per-invocation by `gwa --no-fetch`.
 
 **`gws` / `gwo` — switch / open**
 - **FR-11** `gws <branch>` changes directory to that worktree; `-o` also opens it. `gws` targeting the primary branch reaches the primary worktree.
@@ -289,7 +292,7 @@ As a user who can't or won't use the one-command installer, I want a documented 
 - **FR-20** `GWT_POST_INIT_CMD`, if set, runs inside each new worktree after seeding; failure is reported but the worktree is kept. Default: none.
 - **FR-21** `GWT_OPEN_CMD` is the command used to open a worktree; `{}` is replaced by the worktree path, or the path is appended if `{}` is absent. It is used both to open (`-o`, `gwo`, `gws -o`) and to compose the clipboard "open" command (`-c`). Default: VS Code.
 - **FR-22** `GWT_CLIPBOARD_CMD` is the command that receives the open-command on standard input for `-c`; if its program isn't found (or it is empty), the copy is silently skipped. Default: `pbcopy`.
-- **FR-23** `GWT_PICKER_OPTIONS` supplies extra options to the picker. `GWT_WORKTREE_DIR` sets the base folder. `GWT_TRASH_CMD` is the command that trashes a path for fast `gwr`/`gwclean` removal — auto-detected (`trash`) when unset, settable to another tool (e.g. `trash-put`, `gio trash`), or empty to force native removal. `NO_COLOR` disables color everywhere.
+- **FR-23** `GWT_PICKER_OPTIONS` supplies extra options to the picker. `GWT_WORKTREE_DIR` sets the base folder. `GWT_TRASH_CMD` is the command that trashes a path for fast `gwr`/`gwclean` removal — auto-detected (`trash`) when unset, settable to another tool (e.g. `trash-put`, `gio trash`), or empty to force native removal. `GWT_GWA_FETCH` (default on) controls whether `gwa` refreshes `origin` before its picker/lookup (per FR-10a). `NO_COLOR` disables color everywhere.
 
 **`gwl` — dashboard**
 - **FR-24** `gwl` renders one row per worktree of the current repo, newest-commit-first, with marker, branch, state, sync, last-commit subject, and relative time; the current (`▶`) and primary (`⌂`) worktrees are marked; stale rows are flagged `⚑ stale` and dimmed.
