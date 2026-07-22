@@ -228,16 +228,12 @@ function _gwt_doctor() {
 # ---------------------------------------------------------------------------
 
 # gwt update — upgrade to the latest published version by re-running the npx
-# installer. Quiet on success (reports the version it landed on); -v/--verbose
-# streams the full npx output. Refuses on a dev-link install (would clobber the clone).
+# installer. npx's output (its download notice / "Ok to proceed?" prompt) streams
+# straight to the terminal — those lines are npx's own, left as-is. The installer
+# prints the single "✓ gwt updated to X" confirmation, so we add nothing here.
+# Refuses on a dev-link install (would clobber the clone).
 function _gwt_update() {
-    local verbose="" a
-    for a in "$@"; do
-        case "$a" in
-            -v|--verbose) verbose=1 ;;
-            *) _gwt_error "unknown flag: $a  (usage: gwt update [-v])"; return 1 ;;
-        esac
-    done
+    (( $# )) && { _gwt_error "unexpected argument: $1  (usage: gwt update)"; return 1; }
 
     local dest="$HOME/.gwt/gwt.zsh"
     if [[ -L "$dest" ]]; then
@@ -245,28 +241,8 @@ function _gwt_update() {
         return 1
     fi
 
-    local old="$GWT_VERSION"
-    if [[ -n "$verbose" ]]; then
-        npx @bojangles/gwt@latest || { _gwt_error "update failed"; return 1; }
-    else
-        local out
-        out="$(npx @bojangles/gwt@latest 2>&1)" || {
-            _gwt_error "update failed — check your connection and try again (gwt update -v for details)"
-            return 1
-        }
-    fi
-
-    # Report the version we landed on (read from the freshly-stamped file — authoritative).
-    local new=""
-    [[ -r "$dest" ]] && new="$(grep -m1 'GWT_VERSION=' "$dest" 2>/dev/null | sed -e 's/.*GWT_VERSION="//' -e 's/".*//')"
-    if [[ -z "$new" ]]; then
-        _gwt_info "✓ gwt updated"
-    elif [[ "$new" == "$old" ]]; then
-        _gwt_info "✓ gwt already up to date ($new)"
-    else
-        _gwt_info "✓ gwt updated to $new"
-    fi
-    _gwt_info "  restart your shell (or: source ~/.zshrc)"
+    # Stream npx directly (no command substitution) so its prompt/progress is visible.
+    npx @bojangles/gwt@latest || { _gwt_error "update failed — see the npx output above"; return 1; }
 }
 
 # gwt uninstall — remove gwt: the '# gwt' marker block from ~/.zshrc + ~/.gwt.

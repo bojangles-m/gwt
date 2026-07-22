@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # gwt installer — run via: npx @bojangles/gwt
 #
-# It copies the plugin into ~/.gwt and adds `source` line to ~/.zshrc. No sudo, nothing system-wide.
+# Copies the plugin into ~/.gwt and adds a `source` line to ~/.zshrc. No sudo, nothing system-wide.
 set -e
 
 # Resolve this script's real directory, following symlinks — npm exposes the bin
@@ -21,6 +21,10 @@ MARKER="# gwt (git worktree toolkit)"
 # Single source of truth for the version is in package.json.
 VERSION="$(node -p "require('$PKG/package.json').version")"
 
+# First install vs re-run (update)? Decide before we overwrite anything.
+WAS_INSTALLED=""
+[ -e "$DEST/gwt.zsh" ] && WAS_INSTALLED=1
+
 mkdir -p "$DEST"
 # Drop any stale file/symlink first: a redirection follows a symlink.
 rm -f "$DEST/gwt.zsh"
@@ -32,5 +36,10 @@ if ! grep -qF "$MARKER" "$RC" 2>/dev/null; then
     printf '\n%s\nsource %s\n' "$MARKER" "$DEST/gwt.zsh" >> "$RC"
 fi
 
-echo "✓ gwt $VERSION installed → $DEST/gwt.zsh"
-echo "  Restart your shell (or: source ~/.zshrc), then run: gwt doctor"
+if [ -n "$WAS_INSTALLED" ]; then
+    echo "✓ gwt updated to $VERSION"
+    echo "  Restart your shell (or: source ~/.zshrc)."
+else
+    echo "✓ gwt $VERSION installed"
+    echo "  Restart your shell (or: source ~/.zshrc), then run: gwt doctor"
+fi
