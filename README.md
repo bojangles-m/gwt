@@ -1,4 +1,4 @@
-# gwt — git worktree toolkit
+# 🌳 gwt — git worktree toolkit
 
 A fast, hackable **zsh** toolkit for git worktrees. Create, switch, open, list, and clean up worktrees with short commands and an fzf picker — without leaving your shell.
 
