@@ -40,6 +40,7 @@ That's it — no sudo, nothing system-wide. **gwt** is a _sourced zsh plugin_, s
 - **fzf** — interactive pickers (without it, pass branch names explicitly)
 - an **editor** command for `gwo` / `gwa -o` (see `GWT_OPEN_CMD`)
 - a **clipboard command** for `gwa -c` — `pbcopy` on macOS (the default); on Linux set `GWT_CLIPBOARD_CMD` to `xclip`/`wl-copy`
+- **trash** — makes `gwr` / `gwclean` near-instant by moving worktrees to the Trash instead of a slow recursive delete (auto-detected; set `GWT_TRASH_CMD` for a different tool)
 - **zsh completion** (`compinit`) — Tab completion
 
 **Install-time only:** **Node** (the `npx` installer uses it). Node is _not_ a runtime dependency and is _not_ checked by `gwt doctor`.
@@ -88,6 +89,7 @@ Set these in your shell (or `~/.zshrc`); `gwt doctor` shows the effective values
 | `GWT_CLIPBOARD_CMD`  | Command reading stdin → clipboard, for `gwa -c`             | `pbcopy` (macOS)        |
 | `GWT_POST_INIT_CMD`  | Command run inside a new worktree after creation            | _(none)_                |
 | `GWT_PICKER_OPTIONS` | Extra fzf options for the pickers                           | _(none)_                |
+| `GWT_TRASH_CMD`      | Command to trash a path → fast `gwr`/`gwclean` (`''`=native) | auto (`trash` if found) |
 
 `GWT_COPY_FILES` example for a real project:
 

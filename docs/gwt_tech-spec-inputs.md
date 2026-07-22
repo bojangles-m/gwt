@@ -117,19 +117,27 @@ Symlinks `~/.gwt/gwt.zsh` → the clone's `src/gwt.zsh` (not a copy) and ensures
 
 - Flags: `-d`/`-D` (branch delete, safe/force); any other flag → `passthru` to `git worktree remove`.
 - Targets: explicit branch → its worktree; else multi-picker `_gwt_pick -m --skip-current -p remove` (nothing selected → no-op).
-- Per target: capture `wt_branch` (for delete) via `git -C "$wt" rev-parse --abbrev-ref HEAD`. Remove:
-  - `passthru` present → `git worktree remove "$wt" "${passthru[@]}"`.
-  - elif `_gwt_worktree_is_clean "$wt"` → `git worktree remove --force "$wt"` (silent).
-  - else → `git worktree remove "$wt"` (git refuses + warns on real changes).
+- Per target (`label="${wt:t}"`): capture `wt_branch` (for delete) via `git -C "$wt" rev-parse --abbrev-ref HEAD`. Remove:
+  - `passthru` present → `git worktree remove "$wt" "${passthru[@]}"` (raw git, explicit flags — no trash/spinner).
+  - elif `_gwt_worktree_is_clean "$wt"` → `_gwt_remove_one "$wt" "$label"` (fast trash path + spinner, see B.4a).
+  - else → `git worktree remove "$wt"` (git refuses + warns on real changes; no spinner).
 - If `-d`/`-D` and branch ≠ HEAD: `unique="$(git rev-list --count HEAD..$wt_branch)"`, `git branch <flag> "$wt_branch"`; `unique==0` → info "no unique commits — nothing was lost".
 - Returns 1 if any removal failed.
 
+### B.4a `_gwt_remove_one` — fast removal + in-place spinner
+
+Shared by `gwr` (clean path) and `gwclean`. `$1` = worktree path, `$2` = label.
+- Fast path when `command -v "${GWT_TRASH_CMD%% *}"` succeeds: `{ eval "$GWT_TRASH_CMD ${(q)wt}" && git worktree prune; }` — a **move** to trash (metadata op, ~free) then reconcile git's bookkeeping (no targeted prune exists; global prune is harmless). No trash tool → native `git worktree remove --force "$wt"`.
+- **Fallback:** if trashing exits non-zero, `_gwt_warn "trash failed — removing directly"` then native `git worktree remove --force`.
+- **Spinner:** the removal runs backgrounded (`setopt local_options no_monitor`, output → `mktemp`) with `_gwt_spin $! "removing ${label}…"`. `_gwt_spin` clears the line (`\r\e[K`) and leaves the cursor at col 0; the caller's `_gwt_info "✓ removed ${label}"` then **overwrites that same line** → seamless spinner→checkmark. On failure the captured output is `cat`'d to stderr instead. Non-TTY: no spinner, just the `✓ removed` line (or the error).
+- **Safety:** only ever called for worktrees that should be removed (clean, or stale+clean in `gwclean`); dirty/`--force` paths stay raw git so the "refuse dirty" semantics are unchanged.
+
 ### B.5 `gwclean` — stale cleanup
 
-- `-n`/`--dry-run`. `git fetch --prune --quiet origin` first.
+- `-n`/`--dry-run`. Empty-worktree check first, then `git fetch --prune --quiet origin` wrapped in `_gwt_spin` ("checking remotes…").
 - Scans `${repo_dir}/*(/N)` (managed worktrees only, under `$GWT_WORKTREE_DIR/<repo>`).
-- Skip when branch is empty/HEAD/`main`/`master`/default. Keep unless `_gwt_branch_stale`. Dirty → skip w/ reason. Else (or dry) remove: `git worktree remove --force` + `git branch -D`.
-- Summary of removed/would-remove + skipped. Dry-run returns success only if it would remove something.
+- Skip when branch is empty/HEAD/`main`/`master`/default. Keep unless `_gwt_branch_stale`. Dirty → skip w/ reason. Dry → collect into `would`. Else → `_gwt_remove_one "$wt_dir" "${wt_dir:t}"` (prints `✓ removed <name>`) + `git branch -D`, `n_removed++`.
+- Summary: dry lists `would` (or "nothing to clean"); real prints the `skipped` list + a tail `gwclean: removed N, skipped M` (the redundant per-item "removed:" list was dropped since each `✓` already showed it). Dry-run returns success only if it would remove something.
 
 ### B.6 `gwl` — dashboard (`gwl` / `_gwt_gather_repo`)
 
@@ -180,7 +188,8 @@ Alias: `git worktree prune`.
 
 - Required: git `is-at-least 2.7` (parsed from `git --version`); `GWT_WORKTREE_DIR` set + (existing→writable, or nearest existing ancestor writable → "will be created").
 - Optional: `fzf`; editor = first word of `$GWT_OPEN_CMD` (`?` if unverifiable); clipboard = first word of `$GWT_CLIPBOARD_CMD`; completion = `$+functions[compdef]`.
-- Summary line first; Required + Optional groups; **Config (effective)** dumps all six knobs; outside a repo, a non-failing `ℹ` note. Exit `req_fail ? 1 : 0`.
+- Optional also includes **trash** = first word of `$GWT_TRASH_CMD` probed with `command -v`; present → `✓`, absent → non-failing `?` (speed-up only, never counted as `opt_miss`).
+- Summary line first; Required + Optional groups; **Config (effective)** dumps all seven knobs (incl. `GWT_TRASH_CMD`); outside a repo, a non-failing `ℹ` note. Exit `req_fail ? 1 : 0`.
 
 ---
 
@@ -194,6 +203,7 @@ Alias: `git worktree prune`.
 | `GWT_CLIPBOARD_CMD` | `pbcopy` | reads stdin; first word probed with `command -v`; `eval`'d |
 | `GWT_COPY_FILES` | `(.env)` | seeded into new worktrees; excluded from dirty-detection |
 | `GWT_PICKER_OPTIONS` | (empty) | extra fzf options, word-split via `${=…}` |
+| `GWT_TRASH_CMD` | auto (`trash` if on PATH, else `''`) | trashes a path for fast `gwr`/`gwclean`; first word probed with `command -v`, then `eval`'d; `''` forces native remove. Auto-detected only when unset (`(( ! ${+GWT_TRASH_CMD} ))`), so an explicit empty value is respected |
 | `NO_COLOR` | — | any value disables color in `gwl` and messages |
 
 ---
@@ -207,6 +217,7 @@ Alias: `git worktree prune`.
 - **`gwt uninstall` on a dev-link = warn-then-proceed** (clone untouched).
 - **`npm run dev` alias** for `scripts/link.sh`.
 - **Deprecate superseded npm versions = `<1.1.4`** (old `0.1.x` create-tool + interim `1.1.2`).
+- **Fast worktree removal via `GWT_TRASH_CMD`** (auto-detects `trash`): `gwr` clean-path + `gwclean` move-to-trash + `git worktree prune`; native fallback (and on trash failure). Dirty/`--force` stay raw git (safety unchanged). Uniform per-worktree in-place spinner → `✓ removed <name>` for **both** methods.
 
 **Out of scope (this iteration):** package.json `engines` (none); full Linux auto-defaults; cross-repo/global `-g`; Tab-opens-picker.
 

@@ -44,6 +44,14 @@ GWT_VERSION="0.0.0-dev"   # release version is stamped in here by install.sh
 : ${GWT_PICKER_OPTIONS:=""}
 
 # ---------------------------------------------------------------------------
+# Command that moves a worktree to the trash
+# Shell control: export GWT_TRASH_CMD='gio trash'
+# ---------------------------------------------------------------------------
+if (( ! ${+GWT_TRASH_CMD} )); then
+    (( $+commands[trash] )) && GWT_TRASH_CMD='trash' || GWT_TRASH_CMD=''
+fi
+
+# ---------------------------------------------------------------------------
 # Public commands
 # ---------------------------------------------------------------------------
 
@@ -130,6 +138,8 @@ Configuration:
                                     e.g.  export GWT_CLIPBOARD_CMD='xclip -selection clipboard'
         GWT_PICKER_OPTIONS          fzf options for the interactive branch picker (if installed)
                                     e.g.  export GWT_PICKER_OPTIONS='--height=60% --preview-window=down'
+        GWT_TRASH_CMD               command to trash a path — fast gwr/gwclean (auto-detects \`trash\`)
+                                    e.g.  export GWT_TRASH_CMD='trash-put'   # or '' to force native
 EOF
 }
 
@@ -202,6 +212,14 @@ function _gwt_doctor() {
         opt+=("  $bad  completion  off — ensure 'compinit' runs in your zsh setup"); (( opt_miss++ ))
     fi
 
+    # trash is a pure speed-up (fast gwr/gwclean); its absence is not a failure.
+    local trash="${GWT_TRASH_CMD%% *}"
+    if [[ -n "$trash" ]] && command -v "$trash" >/dev/null; then
+        opt+=("  $ok  trash       '$trash'  (fast gwr/gwclean)")
+    else
+        opt+=("  $maybe  trash       gwr/gwclean use git (slower) — set GWT_TRASH_CMD for fast removal")
+    fi
+
     # --- Summary line (first), then the two groups ---
     local sreq sopt scol="$bld"
     if (( req_fail )); then sreq="${req_fail} required FAILING"; scol="${bld}${r}"
@@ -223,7 +241,8 @@ function _gwt_doctor() {
         "  GWT_CLIPBOARD_CMD   ${GWT_CLIPBOARD_CMD:-<unset>}" \
         "  GWT_COPY_FILES      ${GWT_COPY_FILES[*]:-<none>}" \
         "  GWT_POST_INIT_CMD   ${GWT_POST_INIT_CMD:-<none>}" \
-        "  GWT_PICKER_OPTIONS  ${GWT_PICKER_OPTIONS:-<none>}"
+        "  GWT_PICKER_OPTIONS  ${GWT_PICKER_OPTIONS:-<none>}" \
+        "  GWT_TRASH_CMD       ${GWT_TRASH_CMD:-<none>}"
 
     # --- Context (informational only; never a required failure) ---
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -504,18 +523,19 @@ function gwr() {
         return 1
     fi
 
+    local label
     for wt in $targets; do
+        label="${wt:t}"
         # Capture the branch checked out before removing it, so a -d/-D delete
         # targets the right ref even when <branch> was given in flattened form.
         wt_branch=""
         [[ -n "$delete_flag" ]] && wt_branch="$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null)"
 
-        # Explicit flags -> pass straight through. Otherwise: clean (bar seeded files)
-        # removes silently with --force; real uncommitted work makes git refuse & warn.
+        # removes worktree fast via _gwt_remove_one, real uncommitted work makes git refuse & warn.
         if (( ${#passthru} )); then
             git worktree remove "$wt" "${passthru[@]}" || { rc=1; continue; }
         elif _gwt_worktree_is_clean "$wt"; then
-            git worktree remove --force "$wt" || { rc=1; continue; }
+            _gwt_remove_one "$wt" "$label" || { rc=1; continue; }
         else
             git worktree remove "$wt" || { rc=1; continue; }
         fi
@@ -554,16 +574,22 @@ function gwclean() {
     local repo_dir REPLY
     _gwt_repo_dir || return 1
     repo_dir="$REPLY"
-    git fetch --prune --quiet origin 2>/dev/null
 
     local -a wts=(${repo_dir}/*(/N))
     (( ${#wts} )) || { _gwt_info "gwclean: no worktrees under $repo_dir"; return 0; }
 
+    # Refresh remotes so "gone upstream" is accurate — can be slow, so show a spinner.
+    setopt local_options no_monitor
+    local ftmp; ftmp="$(mktemp "${TMPDIR:-/tmp}/gwt-fetch.XXXXXX")"
+    git fetch --prune --quiet origin >"$ftmp" 2>&1 &
+    _gwt_spin $! "checking remotes…"
+    rm -f "$ftmp"
+
     local default_branch
     default_branch="${$(_gwt_default_branch)#origin/}"
 
-    local wt_dir branch item
-    local -a removed skipped
+    local wt_dir branch item n_removed=0
+    local -a would skipped
     for wt_dir in $wts; do
         branch="$(git -C "$wt_dir" rev-parse --abbrev-ref HEAD 2>/dev/null)"
         [[ -z "$branch" || "$branch" == HEAD || "$branch" == (main|master) || "$branch" == "$default_branch" ]] && continue
@@ -573,27 +599,31 @@ function gwclean() {
             continue
         fi
         if [[ -n "$dry" ]]; then
-            removed+=("${wt_dir:t} ($branch)")                       # would remove; don't touch anything
-        elif git worktree remove --force "$wt_dir" 2>/dev/null; then
+            would+=("${wt_dir:t} ($branch)")                        # would remove; don't touch anything
+        elif _gwt_remove_one "$wt_dir" "${wt_dir:t}"; then          # spinner -> "✓ removed <name>"
             git branch -D "$branch" >/dev/null 2>&1
-            removed+=("${wt_dir:t} ($branch)")
+            (( n_removed++ ))
         else
             skipped+=("${wt_dir:t} ($branch) — remove failed")
         fi
     done
 
-    local verb="removed"; [[ -n "$dry" ]] && verb="would remove"
-    if (( ${#removed} )); then
-        _gwt_info "gwclean: $verb ${#removed} worktree(s):"
-        for item in $removed; do _gwt_info "  $item"; done
+    if [[ -n "$dry" ]]; then
+        if (( ${#would} )); then
+            _gwt_info "gwclean: would remove ${#would} worktree(s):"
+            for item in $would; do _gwt_info "  $item"; done
+        else
+            _gwt_info "gwclean: nothing to clean"
+        fi
     else
-        _gwt_info "gwclean: nothing to clean"
+        (( n_removed == 0 && ${#skipped} == 0 )) && _gwt_info "gwclean: nothing to clean"
+        if (( ${#skipped} )); then
+            _gwt_info "gwclean: skipped ${#skipped}:"
+            for item in $skipped; do _gwt_info "  $item"; done
+        fi
+        (( n_removed || ${#skipped} )) && _gwt_info "gwclean: removed ${n_removed}, skipped ${#skipped}"
     fi
-    if (( ${#skipped} )); then
-        _gwt_info "gwclean: skipped ${#skipped}:"
-        for item in $skipped; do _gwt_info "  $item"; done
-    fi
-    [[ -n "$dry" ]] && (( ${#removed} ))
+    [[ -n "$dry" ]] && (( ${#would} ))
 }
 
 # ---------------------------------------------------------------------------
@@ -744,6 +774,38 @@ function _gwt_worktree_is_clean() {
         return 1                                   # a real change -> not clean
     done
     return 0
+}
+
+# Remove one worktree at <path> (labeled <label> in messages), with an in-place
+# spinner that resolves to "✓ removed <label>" on the same line.
+function _gwt_remove_one() {
+    local wt="$1" label="$2" tmp rc bin="${GWT_TRASH_CMD%% *}" via_trash=""
+    [[ -n "$bin" ]] && command -v "$bin" >/dev/null && via_trash=1
+
+    setopt local_options no_monitor
+    tmp="$(mktemp "${TMPDIR:-/tmp}/gwt-rm.XXXXXX")" || { _gwt_error "could not create a temp file"; return 1; }
+
+    if [[ -n "$via_trash" ]]; then
+        { eval "$GWT_TRASH_CMD ${(q)wt}" && git worktree prune; } >"$tmp" 2>&1 &
+        _gwt_spin $! "removing ${label}…"; rc=$?
+        if (( rc )); then                       # trash failed -> fall back to native
+            _gwt_warn "trash failed — removing directly"
+            : >"$tmp"
+            git worktree remove --force "$wt" >"$tmp" 2>&1 &
+            _gwt_spin $! "removing ${label}…"; rc=$?
+        fi
+    else
+        git worktree remove --force "$wt" >"$tmp" 2>&1 &
+        _gwt_spin $! "removing ${label}…"; rc=$?
+    fi
+
+    if (( rc )); then
+        cat "$tmp" >&2
+    else
+        _gwt_info "✓ removed ${label}"
+    fi
+    rm -f "$tmp"
+    return $rc
 }
 
 # Print the repo's default branch as a remote ref, e.g. "origin/main".

@@ -108,6 +108,8 @@ As a developer, I want to remove a worktree (and optionally its branch) with pro
 - `gwr <branch>` removes that branch's worktree; the branch itself is **kept** by default.
 - `gwr` with no name shows a **multi-select** picker (when available), excluding the worktree you're standing in; marking several and confirming removes all of them. Selecting nothing is a no-op.
 - A worktree that is **clean** (no changes beyond seeded config files) is removed without prompting.
+- While a worktree is being removed, a **progress spinner** is shown (`removing <name>…`) that resolves in place to `✓ removed <name>`, so a slow removal never looks frozen. Each worktree in a multi-remove reports its own line.
+- Removal is **near-instant when a trash tool is available** (the worktree is moved to the Trash and is recoverable); otherwise it is removed natively. The on-screen behavior (spinner + `✓ removed`) is identical either way.
 - A worktree with **real uncommitted changes** is not force-removed — git refuses and warns, and the worktree is kept.
 - `-d` also deletes the branch **safely** (git refuses if it has unmerged commits); `-D` deletes the branch **forcibly**.
 - When a branch deleted with `-d`/`-D` had no commits of its own, the output states plainly that nothing was lost.
@@ -124,8 +126,9 @@ As a developer, I want a single command that removes worktrees I'm clearly done 
 - It removes a worktree **only** when its branch is **stale** (merged / never diverged from the default branch, or upstream gone) **and** the worktree is **clean**; on removal it also deletes the branch.
 - The primary/default branch (and `main`/`master`) is never removed.
 - A stale-but-**dirty** worktree is **skipped** and reported with the reason (uncommitted changes).
+- A progress spinner covers the remote refresh (`checking remotes…`) and each removal reports its own `✓ removed <name>` line (using the same fast trash path as `gwr` when available).
 - `-n` (alias `--dry-run`) previews exactly what would be removed and removes nothing.
-- The output summarizes what was removed (or would be removed) and what was skipped.
+- The output lists what was skipped and ends with a `removed N, skipped M` count (dry-run lists what would be removed).
 - With nothing to clean, it says so plainly.
 
 ### US-8 — See the state of all worktrees · `gwl`
@@ -164,7 +167,7 @@ As a user, I want a single command that tells me whether my environment is ready
 
 **Acceptance Criteria**
 - `gwt doctor` reports **required** checks — git at the minimum supported version, and a usable worktree base folder (set, and existing-or-creatable and writable) — each marked pass/fail with a copy-pasteable fix on failure.
-- It reports **optional** checks — the picker (fzf), an editor command, a clipboard command, and shell completion — each marked available / missing (or "can't verify"), with the single feature each enables.
+- It reports **optional** checks — the picker (fzf), an editor command, a clipboard command, a trash tool (a pure speed-up for removal; its absence is noted but never a failure), and shell completion — each marked available / missing (or "can't verify"), with the single feature each enables.
 - It prints a one-line summary first (e.g. "2 required OK, 1 optional missing").
 - It shows a **Config (effective)** section listing every configuration value currently in effect (or `<unset>`/`<none>`).
 - It runs from **any** directory; outside a git repository it adds an **informational** note to that effect that does **not** count as a failure.
@@ -273,10 +276,11 @@ As a user who can't or won't use the one-command installer, I want a documented 
 **`gwr` — remove**
 - **FR-14** `gwr <branch>` removes that branch's worktree and, by default, keeps the branch. With no name, a multi-select picker (excluding the current worktree) removes all marked worktrees; selecting nothing is a no-op.
 - **FR-15** A clean worktree (changes limited to seeded files) is removed without prompting; a worktree with real uncommitted changes is not force-removed (git refuses and warns; the worktree stays). Extra git-style flags (e.g. `--force`) pass through to the underlying remove.
+- **FR-15a** Removal shows a per-worktree progress spinner that resolves in place to `✓ removed <name>` (TTY only; a slow removal must never appear frozen). When a trash tool is configured (`GWT_TRASH_CMD`, auto-detected), removal moves the worktree to the Trash — near-instant and recoverable — then reconciles git's bookkeeping; otherwise it removes natively. If trashing fails it falls back to native removal (with a brief note). The user-visible behavior is identical for both methods.
 - **FR-16** `-d` deletes the branch safely (refused if unmerged); `-D` deletes it forcibly; when the deleted branch had no unique commits, the output says nothing was lost.
 
 **`gwclean` — stale cleanup**
-- **FR-17** `gwclean` refreshes remote state, then, among the managed worktrees of the current repo, removes those whose branch is stale (merged/never-diverged, or upstream gone) **and** whose worktree is clean, deleting the branch too; it never touches the default/`main`/`master` branch. Stale-but-dirty worktrees are skipped with a reason.
+- **FR-17** `gwclean` refreshes remote state (shown with a spinner), then, among the managed worktrees of the current repo, removes those whose branch is stale (merged/never-diverged, or upstream gone) **and** whose worktree is clean, deleting the branch too; it never touches the default/`main`/`master` branch. Each removal uses the same fast/spinner path as `gwr` (FR-15a) and reports a `✓ removed <name>` line. Stale-but-dirty worktrees are skipped with a reason.
 - **FR-18** `-n`/`--dry-run` previews removals without changing anything; output summarizes removed/would-remove and skipped, or states there is nothing to clean.
 
 **Config-driven behavior**
@@ -284,7 +288,7 @@ As a user who can't or won't use the one-command installer, I want a documented 
 - **FR-20** `GWT_POST_INIT_CMD`, if set, runs inside each new worktree after seeding; failure is reported but the worktree is kept. Default: none.
 - **FR-21** `GWT_OPEN_CMD` is the command used to open a worktree; `{}` is replaced by the worktree path, or the path is appended if `{}` is absent. It is used both to open (`-o`, `gwo`, `gws -o`) and to compose the clipboard "open" command (`-c`). Default: VS Code.
 - **FR-22** `GWT_CLIPBOARD_CMD` is the command that receives the open-command on standard input for `-c`; if its program isn't found (or it is empty), the copy is silently skipped. Default: `pbcopy`.
-- **FR-23** `GWT_PICKER_OPTIONS` supplies extra options to the picker. `GWT_WORKTREE_DIR` sets the base folder. `NO_COLOR` disables color everywhere.
+- **FR-23** `GWT_PICKER_OPTIONS` supplies extra options to the picker. `GWT_WORKTREE_DIR` sets the base folder. `GWT_TRASH_CMD` is the command that trashes a path for fast `gwr`/`gwclean` removal — auto-detected (`trash`) when unset, settable to another tool (e.g. `trash-put`, `gio trash`), or empty to force native removal. `NO_COLOR` disables color everywhere.
 
 **`gwl` — dashboard**
 - **FR-24** `gwl` renders one row per worktree of the current repo, newest-commit-first, with marker, branch, state, sync, last-commit subject, and relative time; the current (`▶`) and primary (`⌂`) worktrees are marked; stale rows are flagged `⚑ stale` and dimmed.
@@ -316,7 +320,7 @@ As a user who can't or won't use the one-command installer, I want a documented 
 - **Not** a rewrite in another language — it stays a sourced zsh toolkit; and **not** distributed as a system-PATH binary or subprocess (a child process cannot `cd` the parent shell or define its interactive commands, which is the whole point).
 - **No** version-syncing machinery — the version has a single source that the installer stamps in; releasing is a manual version bump.
 - The picker is **fzf-specific**; other fuzzy finders are out of scope this iteration.
-- **Not** full cross-platform: macOS-primary; Linux users configure `GWT_OPEN_CMD` and `GWT_CLIPBOARD_CMD` themselves (no OS auto-detection this iteration).
+- **Not** full cross-platform: macOS-primary; Linux users configure `GWT_OPEN_CMD`, `GWT_CLIPBOARD_CMD`, and (if their trash tool isn't named `trash`) `GWT_TRASH_CMD` themselves (no OS auto-detection beyond looking for a `trash` binary this iteration).
 
 ## 7. Visual / Observable Behavior
 
@@ -324,6 +328,7 @@ As a user who can't or won't use the one-command installer, I want a documented 
 - **Doctor (`gwt doctor`):** a summary line first, then a **Required** group and an **Optional** group, each entry marked `✓` (pass), `✗` (fail, with a copy-pasteable fix), or `?` (present but not statically verifiable); then a **Config (effective)** block listing each setting's value; and, outside a repo, a trailing `ℹ` note that the current directory isn't a git repository.
 - **Pickers:** an fzf list showing the branch (with relative date on the branch picker), a live preview pane (recent commits + status for worktrees; author + recent commits for the branch picker), `ctrl-/` to toggle the preview, and a header describing the keys. The remove picker supports multi-select (Tab to mark). Aborting (Esc/Ctrl-C) leaves the typed command on the prompt for editing.
 - **`gwa` output:** git's own "Preparing worktree…" line, then `worktree: <path>` (with `(from <base>)` for a newly cut branch); adoption from a remote is announced beforehand; reusing an existing worktree reports its path.
+- **Removal progress:** a braille spinner on a single line (`⠹ removing <name>…`) that is overwritten in place by `✓ removed <name>` the instant it finishes — the same line, no lingering spinner. Identical whether the removal trashed (near-instant) or removed natively (slower); on a non-terminal there is no spinner, just the `✓ removed <name>` line.
 - **Messages:** `<command>: <message>` form; errors in red, notes in orange, warnings in yellow (on a terminal). Informational output is plain on standard output.
 - **Version (`gwt -v`):** the bare version string alone (e.g. `1.1.5`); a development/linked build reports a clearly-marked development version.
 
