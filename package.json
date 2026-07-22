@@ -1,6 +1,6 @@
 {
   "name": "@bojangles/gwt",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "A fast, hackable zsh toolkit for git worktrees — create, switch, open, list, and clean up worktrees with short commands and an fzf picker.",
   "bin": {
     "gwt-install": "install.sh"
