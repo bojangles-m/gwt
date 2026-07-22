@@ -227,11 +227,24 @@ function _gwt_doctor() {
 # Self-management — update / uninstall (meta-commands; run anywhere, no repo)
 # ---------------------------------------------------------------------------
 
-# gwt update — upgrade to the latest published version by re-running the npx
-# installer. npx's output (its download notice / "Ok to proceed?" prompt) streams
-# straight to the terminal — those lines are npx's own, left as-is. The installer
-# prints the single "✓ gwt updated to X" confirmation, so we add nothing here.
-# Refuses on a dev-link install (would clobber the clone).
+function _gwt_spin() {
+    local pid=$1 msg=$2
+    if [[ -t 1 ]]; then
+        local frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏) i=1
+        while kill -0 $pid 2>/dev/null; do
+            printf '\r%s %s' "${frames[i]}" "$msg"
+            i=$(( i % $#frames + 1 ))
+            sleep 0.1
+        done
+        printf '\r\e[K'          # clear the spinner line
+    fi
+    wait $pid 2>/dev/null
+}
+
+# gwt update — upgrade to the latest published version. First checks the latest
+# published version (fresh, bypassing npm's cache); if you're already on it (or
+# ahead), it just says so and stops. Otherwise it re-runs the npx installer, whose
+# output (download notice / "Ok to proceed?" prompt) streams as-is.
 function _gwt_update() {
     (( $# )) && { _gwt_error "unexpected argument: $1  (usage: gwt update)"; return 1; }
 
@@ -241,7 +254,23 @@ function _gwt_update() {
         return 1
     fi
 
-    # Stream npx directly (no command substitution) so its prompt/progress is visible.
+    # What's the newest published version? --prefer-online so a stale cache can't lie.
+    # The check is a silent network call, so run it in the background with a spinner.
+    local current="$GWT_VERSION" latest tmp
+    setopt local_options no_monitor
+    tmp="$(mktemp "${TMPDIR:-/tmp}/gwt.XXXXXX")"
+    npm view @bojangles/gwt version --prefer-online >"$tmp" 2>/dev/null &
+    _gwt_spin $! "checking for the latest version…"
+    latest="$(<$tmp)"; rm -f "$tmp"
+    [[ -z "$latest" ]] && { _gwt_error "couldn't reach npm — check your connection"; return 1; }
+
+    autoload -Uz is-at-least
+    if is-at-least "$latest" "$current"; then
+        _gwt_info "✓ you have the latest version ($current)"
+        return 0
+    fi
+
+    # install the new version
     npx @bojangles/gwt@latest || { _gwt_error "update failed — see the npx output above"; return 1; }
 }
 
