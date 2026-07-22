@@ -60,6 +60,7 @@ As a developer, I want one command to spin up a worktree for a branch — new or
 - A second positional argument sets the **start-point** for a newly created branch.
 - After creating, gitignored config files are seeded into the new worktree (US-9) and, if configured, a post-create command runs (US-10).
 - By default the "open" command for the new worktree is placed on the clipboard; `-o` opens it in the editor instead.
+- When `gwa` cuts a **new** branch, it durably records what that branch was cut from (its base), so the origin can be shown later (see US-8). Adopting an existing branch records nothing (there was no fork). The record is removed when the branch is later deleted.
 
 ### US-2 — Choose how a new branch is based · `gwa` flags
 As a developer, I want to control what a new branch is based on and what happens after creation, so that the worktree starts from the right commit and opens the way I want.
@@ -144,6 +145,8 @@ As a developer, I want a status dashboard of my worktrees, so that I can see at 
 - Stale rows (what `gwclean` would target) are marked `⚑ stale` and visually recede.
 - `-a` (alias `--all`) shows every repo under the base folder, grouped and labeled, and works from **any** directory (no current repo required).
 - `-p` (alias `--paths`) adds each worktree's short commit SHA and full path.
+- `-b` (alias `--base`) adds a **BASE** column showing what each new branch was cut from (per US-1); branches with no recorded base (adopted, or made outside gwt) show `—`. The column is absent unless `-b` is given.
+- **Short flags bundle:** `gwl -abp` is equivalent to `gwl -a -b -p` (any order/combination); the separate and long-flag forms work too.
 - A summary line reports totals: worktrees (and repos, with `-a`), how many are dirty, how many stale, and how many `gwclean` would remove.
 - Color is used on a terminal and suppressed when `NO_COLOR` is set or output is not a terminal.
 - A detached-HEAD worktree is listed with its commit info and a neutral sync indicator.
@@ -296,7 +299,8 @@ As a user who can't or won't use the one-command installer, I want a documented 
 
 **`gwl` — dashboard**
 - **FR-24** `gwl` renders one row per worktree of the current repo, newest-commit-first, with marker, branch, state, sync, last-commit subject, and relative time; the current (`▶`) and primary (`⌂`) worktrees are marked; stale rows are flagged `⚑ stale` and dimmed.
-- **FR-25** `-a`/`--all` renders every repo under the base folder (grouped/labeled) and works from any directory; `-p`/`--paths` adds short SHA and full path. A trailing summary reports worktree/repo counts, dirty, stale, and how many `gwclean` would remove.
+- **FR-25** `-a`/`--all` renders every repo under the base folder (grouped/labeled) and works from any directory; `-p`/`--paths` adds short SHA and full path; `-b`/`--base` adds a BASE column showing each new branch's recorded origin (`—` when none). `gwl` accepts **bundled short flags** (`gwl -abp` ≡ `-a -b -p`, any order), alongside separate and long forms. A trailing summary reports worktree/repo counts, dirty, stale, and how many `gwclean` would remove.
+- **FR-25a** When `gwa` creates a new branch, it **durably records that branch's base** (what it was cut from) as per-branch metadata; the record is read by `gwl -b` and removed when the branch is deleted (`gwr -d/-D`, `gwclean`). Branches without a record (adopted, or created outside gwt) simply show `—`. `gwclean`'s stale-detection is **not** changed by this record (deferred).
 
 **Meta-commands**
 - **FR-26** `gwp` runs git's worktree prune.

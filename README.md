@@ -66,7 +66,7 @@ gwclean                  # remove stale (merged / gone-upstream) worktrees
 | `gwo [<branch>]` | **Open a worktree** in your editor.<br>No `<branch>` → picker (else the most recent). |
 | `gws [-o] [<branch>]` | **Switch to a worktree** (`cd`). No `<branch>` → picker.<br>`-o` — also open it in your editor |
 | `gwr [-d\|-D] [<branch>] [--force]` | **Remove a worktree.** The branch is kept by default. No `<branch>` → multi-select picker.<br>`-d` — also delete the branch _(safe: refuses if unmerged)_<br>`-D` — also delete the branch _(force)_<br>`--force` — passed straight through to git |
-| `gwl [-a] [-p]` | **Status dashboard** — branch · dirty · ahead/behind · last commit.<br>`-a` — every repo under `GWT_WORKTREE_DIR`<br>`-p` — also show each path + short SHA |
+| `gwl [-a] [-p] [-b]` | **Status dashboard** — branch · dirty · ahead/behind · last commit.<br>`-a` — every repo under `GWT_WORKTREE_DIR`<br>`-p` — also show each path + short SHA<br>`-b` — show what each new branch was cut from<br>_short flags bundle: `gwl -abp` = `-a -b -p`_ |
 | `gwclean [-n]` | **Remove stale worktrees** (merged, or upstream gone).<br>`-n` — dry-run (preview only) |
 | `gwp` | **Prune** git's stale worktree bookkeeping (`git worktree prune`). |
 | `gwt` / `gwt -h` | **Help** — bare lists commands; `-h` adds configuration. |

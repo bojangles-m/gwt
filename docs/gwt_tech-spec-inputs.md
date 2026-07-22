@@ -87,6 +87,7 @@ Symlinks `~/.gwt/gwt.zsh` → the clone's `src/gwt.zsh` (not a copy) and ensures
 
 - **`_gwt_require_repo`** — `git rev-parse --is-inside-work-tree`; on failure emits the uniform `not inside a git repository` and returns 1. Called first in `gwa`/`gws`/`gwo`/`gwr`/`gwclean` and in `gwl`'s non-`-a` branch.
 - **`_gwt_split_args`** — splits argv into caller-local `flags` (tokens starting `-`) and `pos` arrays.
+- **`_gwt_expand_short_flags`** — expands bundled short flags in the caller-local `flags` array (`-abp` → `-a -b -p`); leaves `--long` and single `-x` untouched; generic (no per-flag knowledge — the caller's `case` still validates letters). Opt-in and reusable; **only `gwl` calls it today**, so other commands' parsing is unchanged.
 - **`_gwt_repo_dir`** — `REPLY = $GWT_WORKTREE_DIR/<repo>` where `<repo>` = basename of the parent of `git rev-parse --git-common-dir` (resolved absolute). Errors cleanly outside a repo.
 - **`_gwt_wt_path <branch>`** — `REPLY = <repo dir>/${branch//\//-}` (slash-flatten for the folder; branch keeps its real name).
 - **`_gwt_worktrees [dir]`** — parses `git worktree list --porcelain` into `reply=("path<TAB>branch" …)`; branch is `(detached)` for detached HEAD; primary is first.
@@ -101,6 +102,7 @@ Symlinks `~/.gwt/gwt.zsh` → the clone's `src/gwt.zsh` (not a copy) and ensures
 - No branch → picker (`_gwt_pick_branch`) if `_gwt_is_picker_available`, else usage error. ESC (rc 130) → `print -z` reinject; empty → return 0.
 - Existing worktree for the branch → reuse (no fail): set `_GWT_LAST`, do the action (open/copy/switch→`cd`), return.
 - Post-create action (also the reuse path): `copy` → `_gwt_copy`; `open` → `_gwt_open`; `switch` → `cd "$wt"` (gwa is a function, so it can cd the caller's shell). Default stays put.
+- **Durable branch-origin stamp:** after create, if `base` (reply[2]) is non-empty (genuine fork — adopts leave it empty), `git config branch.<branch>.gwtBase "$base"`. Read by `gwl -b`; unset on branch delete in `gwr -d/-D` and `gwclean` (`git config --unset branch.<b>.gwtBase`). Stores the same value gwa prints in "(from <base>)" — a branch name, or short SHA if cut from detached HEAD. No `gwclean` behavior change (deferred).
 - **`_gwt_create_worktree <branch> [start-point]`** routes:
   - local `refs/heads/<branch>` exists → `git worktree add <wt> <branch>` (adopt).
   - else `refs/remotes/origin/<branch>` exists → note it, `git worktree add --track -b <branch> <wt> origin/<branch>`.
@@ -144,8 +146,9 @@ Shared by `gwr` (clean path) and `gwclean`. `$1` = worktree path, `$2` = label.
 
 ### B.6 `gwl` — dashboard (`gwl` / `_gwt_gather_repo`)
 
-- Flags `-a`/`--all`, `-p`/`--paths`. `-a` scans `${GWT_WORKTREE_DIR}/*(/N)` (works anywhere); non-`-a` requires a repo.
-- Per repo, computed ONCE: default branch; bulk `for-each-ref` over `refs/heads` with `\x1f`-separated fields (committerdate unix/relative, upstream, track, subject, short sha); bulk `branch --merged <base>` set.
+- Flags `-a`/`--all`, `-p`/`--paths`, `-b`/`--base`. Parsed after `_gwt_split_args` + `_gwt_expand_short_flags` (so `gwl -abp` bundles). `-a` scans `${GWT_WORKTREE_DIR}/*(/N)` (works anywhere); non-`-a` requires a repo.
+- Per repo, computed ONCE: default branch; bulk `for-each-ref` over `refs/heads` with `\x1f`-separated fields (committerdate unix/relative, upstream, track, subject, short sha); bulk `branch --merged <base>` set; and (only when `-b`) bulk `git config --get-regexp '^branch\..*\.gwtbase$'` → `m_base` (parse the branch name as the middle between the fixed `branch.` prefix and `.gwtbase` suffix, so names with dots/slashes survive).
+- **Columns/alignment:** WHEN is padded to 16 once `-b` or `-p` is set; `base_info` (padded 20, `—` if no stamp) sits **between** WHEN and the ragged PATH so both stay aligned. Header built from composable `when_h`/`base_h`/`path_h` fragments.
 - **Parallel dirty scan:** each worktree's `git --no-optional-locks status --porcelain` runs backgrounded (`setopt local_options no_monitor`, results → temp dir), then `wait`. Wall-time ≈ slowest single scan.
 - Sync from `upstream:track`: `gone` / `local` (no upstream) / `synced` / `↑a ↓b`; colored (green ahead/synced, yellow behind, magenta diverged, red gone, dim local/detached).
 - Stale = merged-set OR gone, excluding default/`main`/`master`/detached. Markers: `▶` current (`git rev-parse --show-toplevel` match), `⌂` primary (first row).
@@ -223,8 +226,10 @@ Alias: `git worktree prune`.
 - **Deprecate superseded npm versions = `<1.1.4`** (old `0.1.x` create-tool + interim `1.1.2`).
 - **Fast worktree removal via `GWT_TRASH_CMD`** (auto-detects `trash`): `gwr` clean-path + `gwclean` move-to-trash + `git worktree prune`; native fallback (and on trash failure). Dirty/`--force` stay raw git (safety unchanged). Uniform per-worktree in-place spinner → `✓ removed <name>` for **both** methods.
 - **`gwa` refreshes `origin` by default** (`GWT_GWA_FETCH=1`; `--no-fetch` / `=0` off): fetch before the picker, and before resolving a **non-local** named branch (local branch → no fetch). Non-blocking (offline warns + continues; no origin → silent skip). Fixes the footgun where an unfetched `origin/<branch>` became a wrong new branch. Scope: `gwa` only (`gwo`/`gws`/`gwr` untouched; `gwl` freshness deferred; `gwclean` already fetches).
+- **Durable branch-origin stamp** stored in `git config branch.<name>.gwtBase` on new-branch creation; shown by **`gwl -b`/`--base`** (`—` when absent); unset on branch delete. `gwclean` does **not** consume it yet (deferred — changes a destructive command). No env knob. First-cut consumer = display only (chosen over gwclean-accuracy).
+- **`gwl` short-flag bundling** via reusable `_gwt_expand_short_flags` (`gwl -abp`). Scoped to `gwl` only — other commands have mutually-exclusive letter flags (`gwa -c/-o/-s`, `gwr -d/-D`) where bundling is contradictory; the shared splitter is untouched so they don't change. Long flags never bundle (standard).
 
-**Out of scope (this iteration):** package.json `engines` (none); full Linux auto-defaults; cross-repo/global `-g`; Tab-opens-picker.
+**Out of scope (this iteration):** package.json `engines` (none); full Linux auto-defaults; cross-repo/global `-g`; Tab-opens-picker; `gwclean` using the origin stamp; flag-bundling on non-`gwl` commands.
 
 **Pending action:**
 - ☐ `npm deprecate "@bojangles/gwt@<1.1.4" "superseded — please use the latest version (npx @bojangles/gwt@latest)"` (needs the maintainer's 2FA OTP).

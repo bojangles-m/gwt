@@ -10,6 +10,8 @@ and this project follows [Semantic Versioning](https://semver.org/).
 ### Added
 - **Jump straight into a new worktree.** `gwa -s` (`--switch`) creates or adopts a worktree and drops you right into it (`cd`), in one step. Plain `gwa` still leaves your shell where it is.
 - **`gwa` shows fresh branches.** It now refreshes from `origin` first, so a teammate's just-pushed branch appears in the picker — and `gwa <their-branch>` adopts it — without a manual `git fetch`. No more accidentally creating a new local branch when that name already exists on the remote. On by default; disable with `GWT_GWA_FETCH=0` or skip once with `gwa --no-fetch`. Offline just carries on with the last-known list.
+- **See where a branch came from.** `gwt` now remembers what each new branch was cut from, and `gwl -b` (`--base`) shows it in a BASE column — handy when you branch off something other than `main`. Branches made outside gwt show `—`.
+- **Bundle `gwl` flags.** Combine short flags like `gwl -abp` (= `-a -b -p`), in any order — the separate and long forms still work too.
 
 ## [1.1.6] — 2026-07-22
 

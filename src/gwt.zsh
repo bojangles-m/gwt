@@ -91,14 +91,14 @@ EOF
 function _gwt_help() {
     cat <<EOF
 Usage:
-  gwa [-c | -o | -s] [-m] [--no-fetch] [<branch>] [<start-point>]
+  gwa [-c | -o | -s] [-m | --from-main] [--no-fetch] [<branch>] [<start-point>]
       Create a new worktree. No <branch>: fzf picker — pick an existing branch to adopt,
       or type a new name and press enter to create it.
           -c    Copy the "open" command to the clipboard (default)
           -o    Open the worktree in your editor (\$GWT_OPEN_CMD — VS Code by default)
           -s    Switch into the new worktree (cd)
           -m    Base a NEW branch on the local default branch (main) instead of the
-                current HEAD. --from-main. Ignored if <branch> already exists.
+                current HEAD. Ignored if <branch> already exists.
           --no-fetch  Skip the origin refresh for this run (see GWT_GWA_FETCH)
 
   gwo [<branch>]                    Open a worktree in your editor. No <branch>: fzf picker (else the most recent).
@@ -116,11 +116,15 @@ Usage:
       Branches with unpushed/unmerged commits are KEPT — use gwr for those.
           -n    Dry run: preview what would be removed; removes nothing.
 
-  gwl [-a | --all] [-p | --paths]   Worktree status dashboard: branch, dirty, ahead/behind, last commit.
-                                    ⚑ stale = a gwclean candidate. -a = every repo under GWT_WORKTREE_DIR;
-                                    -p = also show each worktree's path + short SHA (replaces plain 'git worktree list').
-  gwp                               Prune stale worktree entries.
+  gwl [-a | --all] [-p | --paths] [-b | --base]
+      Worktree status dashboard: branch, dirty, ahead/behind, last commit.
+      ⚑ stale marks branches gwclean would remove.
+      Short flags bundle: gwl -abp == -a -b -p.
+          -a    Show every repo under \$GWT_WORKTREE_DIR (works from any directory)
+          -p    Also show each worktree's path + short SHA
+          -b    Show what each NEW branch was cut from (— if unknown)
 
+  gwp                               Prune stale worktree entries.
   gwt doctor                        Check your setup — required + optional deps + effective config, with fixes.
   gwt update                        Update gwt to the latest published version.
   gwt uninstall                     Remove gwt (asks for confirmation first).
@@ -443,6 +447,9 @@ function gwa() {
     local wt="${reply[1]}" base="${reply[2]}"
     _gwt_seed_files "$src" "$wt"
 
+    # record what a NEW branch was cut from
+    [[ -n "$base" ]] && git config "branch.${branch}.gwtBase" "$base" 2>/dev/null
+
     # Remember the most recent worktree so a bare `gwo` can reopen it.
     _GWT_LAST="$wt"
 
@@ -581,6 +588,7 @@ function gwr() {
             # Count commits unique to the branch before deleting (ref still exists).
             unique="$(git rev-list --count "HEAD..$wt_branch" 2>/dev/null)"
             if git branch "$delete_flag" "$wt_branch"; then
+                git config --unset "branch.${wt_branch}.gwtBase" 2>/dev/null   # drop the origin stamp
                 # Make the "why did it delete?" self-evident: an empty branch is safe.
                 [[ "$unique" == 0 ]] && \
                     _gwt_info "branch '$wt_branch' had no unique commits — nothing was lost"
@@ -639,6 +647,7 @@ function gwclean() {
             would+=("${wt_dir:t} ($branch)")                        # would remove; don't touch anything
         elif _gwt_remove_one "$wt_dir" "${wt_dir:t}"; then          # spinner -> "✓ removed <name>"
             git branch -D "$branch" >/dev/null 2>&1
+            git config --unset "branch.${branch}.gwtBase" 2>/dev/null   # drop the origin stamp
             (( n_removed++ ))
         else
             skipped+=("${wt_dir:t} ($branch) — remove failed")
@@ -698,6 +707,20 @@ function _gwt_split_args() {
             *)  pos+=("$a") ;;
         esac
     done
+}
+
+# Expand bundled short flags in the caller-local `flags` array: -abp -> -a -b -p.
+# Long flags (--all) and single shorts (-a) pass through untouched.
+function _gwt_expand_short_flags() {
+    local -a out; local f i
+    for f in $flags; do
+        case "$f" in
+            --*) out+=("$f") ;;                                      # long flag: keep whole
+            -?*) for (( i = 2; i <= $#f; i++ )); do out+=("-${f[i]}"); done ;;   # -abp -> -a -b -p
+            *)   out+=("$f") ;;                                      # anything else: keep
+        esac
+    done
+    flags=("${out[@]}")
 }
 
 # Sets REPLY to the worktree path for <branch>: $GWT_WORKTREE_DIR/<repo>/<branch>.
@@ -921,8 +944,10 @@ function _gwt_complete_worktrees() {
 # Rows are sorted newest-commit-first.
 # ⚑ stale marks branches gwclean would remove (merged, never diverged, or gone).
 #
-# Usage: gwl [-a | --all]
+# Usage: gwl [-a | --all] [-p | --paths] [-b | --base]     (short flags bundle: -abp)
 #   -a   show every repo under $GWT_WORKTREE_DIR (works from any directory)
+#   -p   also show each worktree's path + short SHA
+#   -b   show what each NEW branch was cut from (the durable origin stamp; — if none)
 # ---------------------------------------------------------------------------
 
 # Print one repository's worktrees as dashboard rows (helper for gwl).
@@ -965,10 +990,21 @@ function _gwt_gather_repo() {
         done
     fi
 
+    # Durable branch-origin stamps (only when the BASE column is requested).
+    local -A m_base
+    if [[ -n "$show_base" ]]; then
+        local cfgline cfgname
+        for cfgline in "${(@f)$(git -C "$repo_dir" config --get-regexp '^branch\..*\.gwtbase$' 2>/dev/null)}"; do
+            [[ -z "$cfgline" ]] && continue
+            cfgname="${${cfgline%% *}#branch.}"; cfgname="${cfgname%.gwtbase}"
+            m_base[$cfgname]="${cfgline#* }"
+        done
+    fi
+
     local -a group dirty_flag pids
     local i d branch ts when subject up track ahead behind mark stale is_cur state sync sync_color
     local info restd branch_trunc subject_trunc branch_cell state_cell sync_cell subject_cell row tmpd
-    local sha when_out path_info
+    local sha when_out path_info base_info
 
     # The dirty check is the one per-worktree working-tree scan. The scans are
     # independent, so run them in parallel and collect the results — wall-time is
@@ -1041,15 +1077,15 @@ function _gwt_gather_repo() {
         state_cell="${(r:6:)state}";      sync_cell="${(r:11:)sync}"
         is_cur=""; [[ -n "$here" && "$d" == "$here" ]] && is_cur=1
 
-        # -p: pad WHEN so COMMIT aligns, then append short SHA + full path
-        when_out="$when"; path_info=""
-        if [[ -n "$show_paths" ]]; then
-            when_out="${(r:16:)when}"; path_info=" ${(r:7:)sha}  ${d}"
-        fi
+        # Pad WHEN once BASE or PATH follows it; BASE (padded) sits between WHEN and the ragged PATH.
+        when_out="$when"; path_info=""; base_info=""
+        [[ -n "$show_paths" || -n "$show_base" ]] && when_out="${(r:16:)when}"
+        [[ -n "$show_base"  ]] && base_info="  ${(r:20:)${m_base[$branch]:-—}}"
+        [[ -n "$show_paths" ]] && path_info=" ${(r:7:)sha}  ${d}"
 
         if [[ -n "$stale" ]]; then
             # stale rows recede: render plain, then dim the whole line
-            row="${C_DIM}$mark ${branch_cell}   ${state_cell} ${sync_cell} ${subject_cell}    ${when_out}${path_info}  ⚑ stale${C_RESET}"
+            row="${C_DIM}$mark ${branch_cell}   ${state_cell} ${sync_cell} ${subject_cell}    ${when_out}${base_info}${path_info}  ⚑ stale${C_RESET}"
         else
             [[ "$mark" == "▶" ]] && mark="${C_CUR}▶${C_RESET}"
             [[ "$mark" == "⌂" ]] && mark="${C_MAIN}⌂${C_RESET}"
@@ -1057,7 +1093,7 @@ function _gwt_gather_repo() {
             if [[ "$state" == dirty ]]; then state_cell="${C_DIRTY}${state_cell}${C_RESET}"
             else                             state_cell="${C_DIM}${state_cell}${C_RESET}"; fi   # clean/unknown recedes
             sync_cell="${sync_color}${sync_cell}${C_RESET}"
-            row="$mark ${branch_cell}   ${state_cell} ${sync_cell} ${subject_cell}    ${when_out}${path_info}"
+            row="$mark ${branch_cell}   ${state_cell} ${sync_cell} ${subject_cell}    ${when_out}${base_info}${path_info}"
         fi
         group+=("${ts}"$'\t'"$row")
     done
@@ -1072,13 +1108,15 @@ function _gwt_gather_repo() {
 
 function gwl() {
     local -a flags pos
-    local all="" show_paths="" REPLY
+    local all="" show_paths="" show_base="" REPLY
     _gwt_split_args "$@"
+    _gwt_expand_short_flags            # allow bundled shorts: gwl -abp == -a -b -p
     local f
     for f in $flags; do
         case "$f" in
             -a|--all)   all=1 ;;
             -p|--paths) show_paths=1 ;;
+            -b|--base)  show_base=1 ;;
             *) _gwt_error "unknown flag: $f"; return 1 ;;
         esac
     done
@@ -1099,10 +1137,13 @@ function gwl() {
     local here; here="$(git rev-parse --show-toplevel 2>/dev/null)"
     local n_total=0 n_dirty=0 n_stale=0 n_removable=0 n_repos=0 n_shown=0
 
-    local h1=BRANCH h2=STATE h3=SYNC h4="LAST COMMIT" h5=WHEN h6=COMMIT
-    local header="${C_BOLD}  ${(r:20:)h1}   ${(r:6:)h2} ${(r:11:)h3} ${(r:30:)h4}    ${h5}${C_RESET}"
-    [[ -n "$show_paths" ]] && \
-        header="${C_BOLD}  ${(r:20:)h1}   ${(r:6:)h2} ${(r:11:)h3} ${(r:30:)h4}    ${(r:16:)h5} ${(r:7:)h6}  PATH${C_RESET}"
+    local h1=BRANCH h2=STATE h3=SYNC h4="LAST COMMIT" h5=WHEN h6=COMMIT h7=BASE
+    # WHEN is padded once BASE or PATH follows it; BASE sits between WHEN and PATH so both align.
+    local when_h="$h5" base_h="" path_h=""
+    [[ -n "$show_paths" || -n "$show_base" ]] && when_h="${(r:16:)h5}"
+    [[ -n "$show_base"  ]] && base_h="  ${(r:20:)h7}"
+    [[ -n "$show_paths" ]] && path_h=" ${(r:7:)h6}  PATH"
+    local header="${C_BOLD}  ${(r:20:)h1}   ${(r:6:)h2} ${(r:11:)h3} ${(r:30:)h4}    ${when_h}${base_h}${path_h}${C_RESET}"
 
     if [[ -n "$all" ]]; then
         # every repo under $GWT_WORKTREE_DIR — works from anywhere, no repo needed
