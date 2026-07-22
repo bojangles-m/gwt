@@ -6,21 +6,27 @@
     "gwt-install": "install.sh"
   },
   "scripts": {
-    "dev": "sh scripts/link.sh"
+    "dev": "sh scripts/link.sh",
+    "test": "zsh test/smoke.zsh"
   },
   "files": [
     "src/gwt.zsh",
     "install.sh",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "keywords": [
     "git",
     "worktree",
     "worktrees",
+    "git-worktree",
+    "worktree-manager",
     "zsh",
+    "zsh-plugin",
     "cli",
     "fzf",
+    "developer-tools",
     "productivity"
   ],
   "repository": {

@@ -1,5 +1,10 @@
 # 🌳 gwt — git worktree toolkit
 
+[![CI](https://github.com/bojangles-m/gwt/actions/workflows/ci.yml/badge.svg)](https://github.com/bojangles-m/gwt/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@bojangles/gwt?color=cb3837&logo=npm)](https://www.npmjs.com/package/@bojangles/gwt)
+[![npm downloads](https://img.shields.io/npm/dm/@bojangles/gwt?color=cb3837&logo=npm)](https://www.npmjs.com/package/@bojangles/gwt)
+[![license](https://img.shields.io/npm/l/@bojangles/gwt)](LICENSE)
+
 A fast, hackable **zsh** toolkit for git worktrees. Create, switch, open, list, and clean up worktrees with short commands and an fzf picker — without leaving your shell.
 
 ```
@@ -12,6 +17,18 @@ gwclean                 remove stale worktrees
 gwt doctor              check your setup
 gwt update | uninstall
 ```
+
+<!-- Demo: record a short clip and drop it in here for the top-of-page hook.
+     asciinema rec demo.cast   →   agg demo.cast docs/demo.gif   (brew install asciinema agg)
+     then uncomment:
+![gwt demo](docs/demo.gif)
+-->
+
+## Why
+
+Switching branches in place is disruptive: you stash or commit half-done work, your editor reloads, and your build output and `node_modules` get invalidated — so the next install or rebuild crawls. Git **worktrees** fix this by checking out each branch in its own folder, so `main`, a feature branch, and a hotfix can all be live at once and you switch between them instantly.
+
+The catch is that raw `git worktree` is verbose and leaves you juggling paths by hand. **gwt** wraps it in short commands and an fzf picker — create or adopt a branch's worktree, jump between them, open one in your editor, and clean up merged ones — without leaving your shell or memorizing a single path.
 
 ## Install
 
@@ -106,8 +123,9 @@ gwt uninstall    # remove the ~/.zshrc line + ~/.gwt (asks first; -y to skip)
 ```
 
 Manual equivalents if ever needed:
-**To updated**: run `npx @bojangles/gwt@latest`
-**To uninstall**: delete the `# gwt` block from `~/.zshrc` and `rm -rf ~/.gwt`.
+
+- **To update**: run `npx @bojangles/gwt@latest`
+- **To uninstall**: delete the `# gwt` block from `~/.zshrc` and `rm -rf ~/.gwt`.
 
 ## Development
 

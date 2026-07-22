@@ -7,6 +7,16 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-07-22
+
+### Changed
+- Polished the README (added a **Why** section and npm badges) and expanded the npm keywords to make the package easier to find. The changelog now ships inside the published package.
+
+### Fixed
+- Corrected the `LICENSE` copyright holder, which was a leftover template name.
+
+## [1.2.0] — 2026-07-22
+
 ### Added
 - **Jump straight into a new worktree.** `gwa -s` (`--switch`) creates or adopts a worktree and drops you right into it (`cd`), in one step. Plain `gwa` still leaves your shell where it is.
 - **`gwa` shows fresh branches.** It now refreshes from `origin` first, so a teammate's just-pushed branch appears in the picker — and `gwa <their-branch>` adopts it — without a manual `git fetch`. No more accidentally creating a new local branch when that name already exists on the remote. On by default; disable with `GWT_GWA_FETCH=0` or skip once with `gwa --no-fetch`. Offline just carries on with the last-known list.
@@ -55,7 +65,9 @@ The `0.1.x` releases were a **different, create-only tool** and are **deprecated
 They are unrelated to the current plugin — install the latest instead:
 `npx @bojangles/gwt@latest`.
 
-[Unreleased]: https://github.com/bojangles-m/gwt/compare/v1.1.6...HEAD
+[Unreleased]: https://github.com/bojangles-m/gwt/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/bojangles-m/gwt/releases/tag/v1.2.1
+[1.2.0]: https://github.com/bojangles-m/gwt/releases/tag/v1.2.0
 [1.1.6]: https://github.com/bojangles-m/gwt/releases/tag/v1.1.6
 [1.1.5]: https://github.com/bojangles-m/gwt/releases/tag/v1.1.5
 [1.1.4]: https://github.com/bojangles-m/gwt/releases/tag/v1.1.4
