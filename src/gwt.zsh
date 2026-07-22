@@ -25,6 +25,12 @@ GWT_VERSION="0.0.0-dev"   # release version is stamped in here by install.sh
 : ${GWT_OPEN_CMD:='code -n && code -a {}'}
 
 # ---------------------------------------------------------------------------
+# Command that reads stdin and writes it on the clipboard.
+# Shell control: export GWT_CLIPBOARD_CMD='xclip -selection clipboard' // Linux
+# ---------------------------------------------------------------------------
+: ${GWT_CLIPBOARD_CMD:='pbcopy'}
+
+# ---------------------------------------------------------------------------
 # Gitignored files copied into each new worktree (only the ones that exist).
 # Worktrees don't inherit gitignored files, so untracked ones (e.g. .env) are copied.
 # Shell control: export GWT_COPY_FILES=(.env .npmrc application/config/config.php)
@@ -119,6 +125,9 @@ Configuration:
         GWT_OPEN_CMD                command used to open a worktree ({} = its path)
                                     default: code -n && code -a {}
                                     e.g.  export GWT_OPEN_CMD='cursor {}'
+        GWT_CLIPBOARD_CMD           command that reads stdin -> clipboard (gwa -c)
+                                    default: pbcopy (macOS)
+                                    e.g.  export GWT_CLIPBOARD_CMD='xclip -selection clipboard'
         GWT_PICKER_OPTIONS          fzf options for the interactive branch picker (if installed)
                                     e.g.  export GWT_PICKER_OPTIONS='--height=60% --preview-window=down'
 EOF
@@ -180,10 +189,11 @@ function _gwt_doctor() {
         opt+=("  $maybe  editor      can't verify GWT_OPEN_CMD='$GWT_OPEN_CMD' — tried when you open")
     fi
 
-    if (( $+commands[pbcopy] )); then
-        opt+=("  $ok  pbcopy      gwa -c clipboard")
+    local clip="${GWT_CLIPBOARD_CMD%% *}"
+    if [[ -n "$clip" ]] && (( $+commands[$clip] )); then
+        opt+=("  $ok  clipboard   '$clip'  (gwa -c)")
     else
-        opt+=("  $bad  pbcopy      gwa -c copy skipped (macOS only)"); (( opt_miss++ ))
+        opt+=("  $bad  clipboard   gwa -c skipped — set GWT_CLIPBOARD_CMD (e.g. xclip, wl-copy)"); (( opt_miss++ ))
     fi
 
     if (( $+functions[compdef] )); then
@@ -210,6 +220,7 @@ function _gwt_doctor() {
     print -rl -- \
         "  GWT_WORKTREE_DIR    ${GWT_WORKTREE_DIR:-<unset>}" \
         "  GWT_OPEN_CMD        ${GWT_OPEN_CMD:-<unset>}" \
+        "  GWT_CLIPBOARD_CMD   ${GWT_CLIPBOARD_CMD:-<unset>}" \
         "  GWT_COPY_FILES      ${GWT_COPY_FILES[*]:-<none>}" \
         "  GWT_POST_INIT_CMD   ${GWT_POST_INIT_CMD:-<none>}" \
         "  GWT_PICKER_OPTIONS  ${GWT_PICKER_OPTIONS:-<none>}"
@@ -707,13 +718,14 @@ function _gwt_open_cmd() {
     fi
 }
 
-# Copy a ready-to-run "open" command (per $GWT_OPEN_CMD) to the clipboard.
+# Copy a ready-to-run "open" command to the clipboard.
 function _gwt_copy() {
-    command -v pbcopy >/dev/null || return 0
-    _gwt_open_cmd "$1" | pbcopy
+    local clip="${GWT_CLIPBOARD_CMD%% *}"    # first word = the binary to probe
+    [[ -n "$clip" ]] && command -v "$clip" >/dev/null || return 0
+    _gwt_open_cmd "$1" | eval "$GWT_CLIPBOARD_CMD"
 }
 
-# Open the worktree at <path> using $GWT_OPEN_CMD.
+# Open the worktree at <path>.
 function _gwt_open() {
     eval "$(_gwt_open_cmd "$1" q)"
 }

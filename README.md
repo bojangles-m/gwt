@@ -39,7 +39,7 @@ That's it — no sudo, nothing system-wide. **gwt** is a _sourced zsh plugin_, s
 
 - **fzf** — interactive pickers (without it, pass branch names explicitly)
 - an **editor** command for `gwo` / `gwa -o` (see `GWT_OPEN_CMD`)
-- **pbcopy** — `gwa -c` clipboard copy (macOS)
+- a **clipboard command** for `gwa -c` — `pbcopy` on macOS (the default); on Linux set `GWT_CLIPBOARD_CMD` to `xclip`/`wl-copy`
 - **zsh completion** (`compinit`) — Tab completion
 
 **Install-time only:** **Node** (the `npx` installer uses it). Node is _not_ a runtime dependency and is _not_ checked by `gwt doctor`.
@@ -85,6 +85,7 @@ Set these in your shell (or `~/.zshrc`); `gwt doctor` shows the effective values
 | `GWT_WORKTREE_DIR`   | Base folder holding all worktrees (`$dir/<repo>/<branch>`)  | `~/dev/workspace`       |
 | `GWT_COPY_FILES`     | Gitignored files copied into each new worktree (if present) | `(.env)`                |
 | `GWT_OPEN_CMD`       | Command to open a worktree (`{}` = its path)                | `code -n && code -a {}` |
+| `GWT_CLIPBOARD_CMD`  | Command reading stdin → clipboard, for `gwa -c`             | `pbcopy` (macOS)        |
 | `GWT_POST_INIT_CMD`  | Command run inside a new worktree after creation            | _(none)_                |
 | `GWT_PICKER_OPTIONS` | Extra fzf options for the pickers                           | _(none)_                |
 
@@ -130,7 +131,10 @@ echo 'source ~/.gwt-src/src/gwt.zsh' >> ~/.zshrc
 
 Primary: macOS - the defaults are mac-flavored (`pbcopy`, `code`);
 
-Linux: set `GWT_OPEN_CMD` to your editor and wire your own clipboard.
+Linux:
+
+- Configure `GWT_OPEN_CMD` with your preferred editor.
+- Configure `GWT_CLIPBOARD_CMD` with your preferred clipboard tool (`xclip -selection clipboard` or `wl-copy`).
 
 ## License
 
