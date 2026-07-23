@@ -79,24 +79,29 @@ gwclean                  # remove stale (merged / gone-upstream) worktrees
 
 ## Features
 
-What gwt gives you at a glance — see [Commands](#commands) below for exact syntax and flags.
+At a glance — see [Commands](#commands) below for exact syntax and flags.
 
-| Feature                                 | What you get                                                                                                           |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Native shell `cd`                       | Jump _into_ a worktree — it's a sourced zsh plugin, so your shell actually moves (a compiled binary can't)             |
-| Fuzzy pickers (optional)                | Fzf-select an existing branch/worktree, or type a new name to create one — and it still works without fzf (pass names) |
-| Branch off your default (`-m`)          | Cut a new branch from `main`/your default instead of current `HEAD`                                                    |
-| Jump in on create (`gwa -s`)            | Create or adopt a worktree and `cd` straight into it, in one step                                                      |
-| Adopt pushed branches                   | Refreshes `origin` first, so a teammate's just-pushed branch shows up and is adopted — not re-created locally          |
-| Seed new worktrees                      | Copies your gitignored files (`.env`, …) into each new worktree                                                        |
-| Post-create hook                        | Runs any command in a fresh worktree (install deps, build, …)                                                          |
-| Status dashboard                        | `gwl`: dirty state, ahead/behind, and last commit across all worktrees                                                 |
-| Origin tracking                         | Remembers what each branch was cut from (`gwl -b`)                                                                     |
-| Stale cleanup                           | `gwclean` clears merged / upstream-gone worktrees in one go                                                            |
-| Instant, recoverable removal            | Moves worktrees to the Trash — fast on big `node_modules`, and undo-able                                               |
-| Zero-install & hackable                 | One `npx`, no daemon or binary — it's plain zsh you can read and tweak                                                 |
-| Setup doctor                            | `gwt doctor` verifies your environment and shows the effective config                                                  |
-| 🔜 `exec` in a worktree _(coming soon)_ | Run a one-off command inside a worktree without `cd`-ing into it                                                       |
+| Feature                         | What you get                                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Create &amp; adopt**          |                                                                                                                    |
+| 🔎 Fuzzy picker                 | Pick an existing branch, or type a new name to create it — and it still works without fzf (just pass names)        |
+| 🌿 Adopt a pushed branch        | Refreshes `origin` first, so a teammate's just-pushed branch shows up and is adopted, not re-created locally       |
+| 🎯 Branch off your default      | `gwa -m` cuts the new branch from `main` (your default) instead of the current `HEAD`                              |
+| 🌱 Seed new worktrees           | Copies your gitignored files (`.env`, …) into every new worktree                                                   |
+| 🪝 Post-create hook             | Runs any command in a fresh worktree — install deps, kick off a build, whatever you need                           |
+| **Work across worktrees**       |                                                                                                                    |
+| 🚀 Native shell `cd`            | Jump right _into_ a worktree — gwt is a sourced zsh plugin, so your shell actually moves (a compiled binary can't) |
+| ⚡ Jump in on create            | `gwa -s` creates or adopts a worktree and drops you straight into it, in one step                                  |
+| 📊 Status dashboard             | `gwl` shows dirty state, ahead/behind, and the last commit across all your worktrees                               |
+| 🧭 Origin tracking              | Remembers what each branch was cut from — shown by `gwl -b`                                                        |
+| **Clean up**                    |                                                                                                                    |
+| 🧹 Stale cleanup                | `gwclean` clears merged and upstream-gone worktrees in one go                                                      |
+| 🗑️ Instant, recoverable removal | Moves worktrees to the Trash — fast even with a huge `node_modules`, and undo-able                                 |
+| **Comfort &amp; setup**         |                                                                                                                    |
+| 📦 Zero-install &amp; hackable  | One `npx`, no daemon or binary — it's plain zsh you can read and tweak                                             |
+| 🩺 Setup doctor                 | `gwt doctor` checks your environment and shows the effective config                                                |
+| **🔜 Coming soon**              |                                                                                                                    |
+| `exec` in a worktree            | Run a one-off command inside a worktree without `cd`-ing into it                                                   |
 
 ## Commands
 
