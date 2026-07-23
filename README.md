@@ -1,4 +1,6 @@
-# 🌳 gwt — git worktree toolkit
+<img src="https://raw.githubusercontent.com/bojangles-m/gwt/main/docs/icon.svg" alt="gwt — git worktree toolkit" width="80">
+
+# gwt - git worktree toolkit
 
 [![CI](https://github.com/bojangles-m/gwt/actions/workflows/ci.yml/badge.svg)](https://github.com/bojangles-m/gwt/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/@bojangles/gwt?color=cb3837&logo=npm)](https://www.npmjs.com/package/@bojangles/gwt)
@@ -75,22 +77,43 @@ gwr feature-123          # remove the worktree (keep the branch; -d also deletes
 gwclean                  # remove stale (merged / gone-upstream) worktrees
 ```
 
+## Features
+
+What gwt gives you at a glance — see [Commands](#commands) below for exact syntax and flags.
+
+| Feature                                 | What you get                                                                                                           |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Native shell `cd`                       | Jump _into_ a worktree — it's a sourced zsh plugin, so your shell actually moves (a compiled binary can't)             |
+| Fuzzy pickers (optional)                | Fzf-select an existing branch/worktree, or type a new name to create one — and it still works without fzf (pass names) |
+| Branch off your default (`-m`)          | Cut a new branch from `main`/your default instead of current `HEAD`                                                    |
+| Jump in on create (`gwa -s`)            | Create or adopt a worktree and `cd` straight into it, in one step                                                      |
+| Adopt pushed branches                   | Refreshes `origin` first, so a teammate's just-pushed branch shows up and is adopted — not re-created locally          |
+| Seed new worktrees                      | Copies your gitignored files (`.env`, …) into each new worktree                                                        |
+| Post-create hook                        | Runs any command in a fresh worktree (install deps, build, …)                                                          |
+| Status dashboard                        | `gwl`: dirty state, ahead/behind, and last commit across all worktrees                                                 |
+| Origin tracking                         | Remembers what each branch was cut from (`gwl -b`)                                                                     |
+| Stale cleanup                           | `gwclean` clears merged / upstream-gone worktrees in one go                                                            |
+| Instant, recoverable removal            | Moves worktrees to the Trash — fast on big `node_modules`, and undo-able                                               |
+| Zero-install & hackable                 | One `npx`, no daemon or binary — it's plain zsh you can read and tweak                                                 |
+| Setup doctor                            | `gwt doctor` verifies your environment and shows the effective config                                                  |
+| 🔜 `exec` in a worktree _(coming soon)_ | Run a one-off command inside a worktree without `cd`-ing into it                                                       |
+
 ## Commands
 
-| Command | What it does |
-| --- | --- |
+| Command                                                         | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `gwa [-c\|-o\|-s] [-m] [--no-fetch] [<branch>] [<start-point>]` | **Create or adopt a worktree.** No `<branch>` → fzf picker: adopt an existing branch, or type a new name to create it. Refreshes `origin` first so colleagues' branches are current (see `GWT_GWA_FETCH`).<br>`-c` — copy the "open" command to the clipboard _(default)_<br>`-o` — open it in your editor<br>`-s` — switch into it (`cd`)<br>`-m` — base a new branch on your default branch (not `HEAD`)<br>`--no-fetch` — skip the `origin` refresh this run |
-| `gwo [<branch>]` | **Open a worktree** in your editor.<br>No `<branch>` → picker (else the most recent). |
-| `gws [-o] [<branch>]` | **Switch to a worktree** (`cd`). No `<branch>` → picker.<br>`-o` — also open it in your editor |
-| `gwr [-d\|-D] [<branch>] [--force]` | **Remove a worktree.** The branch is kept by default. No `<branch>` → multi-select picker.<br>`-d` — also delete the branch _(safe: refuses if unmerged)_<br>`-D` — also delete the branch _(force)_<br>`--force` — passed straight through to git |
-| `gwl [-a] [-p] [-b]` | **Status dashboard** — branch · dirty · ahead/behind · last commit.<br>`-a` — every repo under `GWT_WORKTREE_DIR`<br>`-p` — also show each path + short SHA<br>`-b` — show what each new branch was cut from<br>_short flags bundle: `gwl -abp` = `-a -b -p`_ |
-| `gwclean [-n]` | **Remove stale worktrees** (merged, or upstream gone).<br>`-n` — dry-run (preview only) |
-| `gwp` | **Prune** git's stale worktree bookkeeping (`git worktree prune`). |
-| `gwt` / `gwt -h` | **Help** — bare lists commands; `-h` adds configuration. |
-| `gwt -v` | **Version** — prints the bare version string. |
-| `gwt doctor` | **Diagnostics** — checks your setup and shows the effective configuration. |
-| `gwt update` | **Update** to the latest published version. |
-| `gwt uninstall` | **Uninstall** gwt (asks first; `-y` to skip). |
+| `gwo [<branch>]`                                                | **Open a worktree** in your editor.<br>No `<branch>` → picker (else the most recent).                                                                                                                                                                                                                                                                                                                                                                           |
+| `gws [-o] [<branch>]`                                           | **Switch to a worktree** (`cd`). No `<branch>` → picker.<br>`-o` — also open it in your editor                                                                                                                                                                                                                                                                                                                                                                  |
+| `gwr [-d\|-D] [<branch>] [--force]`                             | **Remove a worktree.** The branch is kept by default. No `<branch>` → multi-select picker.<br>`-d` — also delete the branch _(safe: refuses if unmerged)_<br>`-D` — also delete the branch _(force)_<br>`--force` — passed straight through to git                                                                                                                                                                                                              |
+| `gwl [-a] [-p] [-b]`                                            | **Status dashboard** — branch · dirty · ahead/behind · last commit.<br>`-a` — every repo under `GWT_WORKTREE_DIR`<br>`-p` — also show each path + short SHA<br>`-b` — show what each new branch was cut from<br>_short flags bundle: `gwl -abp` = `-a -b -p`_                                                                                                                                                                                                   |
+| `gwclean [-n]`                                                  | **Remove stale worktrees** (merged, or upstream gone).<br>`-n` — dry-run (preview only)                                                                                                                                                                                                                                                                                                                                                                         |
+| `gwp`                                                           | **Prune** git's stale worktree bookkeeping (`git worktree prune`).                                                                                                                                                                                                                                                                                                                                                                                              |
+| `gwt` / `gwt -h`                                                | **Help** — bare lists commands; `-h` adds configuration.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `gwt -v`                                                        | **Version** — prints the bare version string.                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `gwt doctor`                                                    | **Diagnostics** — checks your setup and shows the effective configuration.                                                                                                                                                                                                                                                                                                                                                                                      |
+| `gwt update`                                                    | **Update** to the latest published version.                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `gwt uninstall`                                                 | **Uninstall** gwt (asks first; `-y` to skip).                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 `gwt`, `gwt -h`, `gwt -v`, `gwt doctor`, `gwt update`, and `gwt uninstall` work from anywhere. The worktree commands need to be run inside a git repository.
 
@@ -98,15 +121,15 @@ gwclean                  # remove stale (merged / gone-upstream) worktrees
 
 Set these in your shell (or `~/.zshrc`); `gwt doctor` shows the effective values.
 
-| Variable             | Purpose                                                     | Default                 |
-| -------------------- | ----------------------------------------------------------- | ----------------------- |
-| `GWT_WORKTREE_DIR`   | Base folder holding all worktrees (`$dir/<repo>/<branch>`)  | `~/dev/workspace`       |
-| `GWT_COPY_FILES`     | Gitignored files copied into each new worktree (if present) | `(.env)`                |
-| `GWT_OPEN_CMD`       | Command to open a worktree (`{}` = its path)                | `code -n && code -a {}` |
-| `GWT_CLIPBOARD_CMD`  | Command reading stdin → clipboard, for `gwa -c`             | `pbcopy` (macOS)        |
-| `GWT_POST_INIT_CMD`  | Command run inside a new worktree after creation            | _(none)_                |
-| `GWT_PICKER_OPTIONS` | Extra fzf options for the pickers                           | _(none)_                |
-| `GWT_TRASH_CMD`      | Command to trash a path → fast `gwr`/`gwclean` (`''`=native) | auto (`trash` if found) |
+| Variable             | Purpose                                                                             | Default                 |
+| -------------------- | ----------------------------------------------------------------------------------- | ----------------------- |
+| `GWT_WORKTREE_DIR`   | Base folder holding all worktrees (`$dir/<repo>/<branch>`)                          | `~/dev/workspace`       |
+| `GWT_COPY_FILES`     | Gitignored files copied into each new worktree (if present)                         | `(.env)`                |
+| `GWT_OPEN_CMD`       | Command to open a worktree (`{}` = its path)                                        | `code -n && code -a {}` |
+| `GWT_CLIPBOARD_CMD`  | Command reading stdin → clipboard, for `gwa -c`                                     | `pbcopy` (macOS)        |
+| `GWT_POST_INIT_CMD`  | Command run inside a new worktree after creation                                    | _(none)_                |
+| `GWT_PICKER_OPTIONS` | Extra fzf options for the pickers                                                   | _(none)_                |
+| `GWT_TRASH_CMD`      | Command to trash a path → fast `gwr`/`gwclean` (`''`=native)                        | auto (`trash` if found) |
 | `GWT_GWA_FETCH`      | Refresh `origin` before the `gwa` picker/lookup (`0`=off; per-run `gwa --no-fetch`) | `1` (on)                |
 
 `GWT_COPY_FILES` example for a real project:
