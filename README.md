@@ -1,4 +1,4 @@
-<img src="https://raw.githubusercontent.com/bojangles-m/gwt/main/docs/icon.svg" alt="gwt — git worktree toolkit" width="80">
+<img src="https://raw.githubusercontent.com/bojangles-m/gwt/main/docs/banner.svg" alt="gwt — git worktree toolkit">
 
 # gwt - git worktree toolkit
 
@@ -19,12 +19,6 @@ gwclean                 remove stale worktrees
 gwt doctor              check your setup
 gwt update | uninstall
 ```
-
-<!-- Demo: record a short clip and drop it in here for the top-of-page hook.
-     asciinema rec demo.cast   →   agg demo.cast docs/demo.gif   (brew install asciinema agg)
-     then uncomment:
-![gwt demo](docs/demo.gif)
--->
 
 ## Why
 
