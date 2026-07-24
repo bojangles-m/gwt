@@ -4,6 +4,9 @@
 
 GWT_VERSION="0.0.0-dev"   # release version is stamped in here by install.sh
 
+# base dir for `gwx -d` detached logs.
+GWT_EXEC_LOG_DIR="$HOME/.gwt/logs"
+
 # ---------------------------------------------------------------------------
 # All worktrees live under $GWT_WORKTREE_DIR/<repo-name>/<branch>.
 # Shell control: export GWT_WORKTREE_DIR='$HOM/<repo-name>/<branch>'
@@ -58,6 +61,7 @@ fi
 # ---------------------------------------------------------------------------
 : ${GWT_GWA_FETCH:=1}
 
+
 # ---------------------------------------------------------------------------
 # Public commands
 # ---------------------------------------------------------------------------
@@ -103,6 +107,12 @@ Usage:
 
   gwo [<branch>]                    Open a worktree in your editor. No <branch>: fzf picker (else the most recent).
   gws [-o] [<branch>]               Switch to a worktree (cd). No <branch>: fzf picker; -o also opens it in your editor.
+
+  gwx [-d] [<branch>] -- <command>
+      Run a command inside a worktree without cd-ing there. No <branch>: fzf picker.
+      Everything after -- runs verbatim; output streams live and the exit code passes through.
+          -d    Detach: run in the background (survives the terminal). Output is logged to
+                ~/.gwt/logs/<repo>/<branch>.log — tail -f it to watch.
 
   gwr [-d | -D] [<branch>] [--force]
       Remove a worktree. The branch is KEPT unless you pass -d/-D.
@@ -534,6 +544,75 @@ function gws() {
     [[ -n "$open" ]] && _gwt_open "$wt"     # -o: also open in $GWT_OPEN_CMD
 }
 
+# ---------------------------------------------------------------------------
+# gwx — run a command inside a worktree without cd-ing there ("exec").
+# gwx [-d | --detach] [<branch>] -- <command> [args…]
+#   No <branch>: fzf picker (single-select) to choose the worktree.
+#   Everything after `--` is the command, run VERBATIM (direct argv, no shell).
+#     Need a pipe/chain? gwx <b> -- zsh -c 'a | b'.
+#   Default (attached): streams live, stdin/TTY connected, exit code passes through.
+#   -d/--detach: run in the background (disowned — survives the terminal closing);
+#     output → ~/.gwt/logs/<repo>/<worktree>.log.
+# ---------------------------------------------------------------------------
+function gwx() {
+    _gwt_require_repo || return 1
+
+    # Split argv at the first `--`: left = flags + <branch>, right = command (verbatim).
+    local -a pre cmd
+    local sep="" a
+    for a in "$@"; do
+        if [[ -z "$sep" && "$a" == "--" ]]; then sep=1; continue; fi
+        if [[ -n "$sep" ]]; then cmd+=("$a"); else pre+=("$a"); fi
+    done
+    [[ -n "$sep" ]] || { _gwt_error "missing '--' — usage: gwx [-d] [<branch>] -- <command>"; return 1; }
+    (( ${#cmd} ))   || { _gwt_error "no command after '--' — usage: gwx [-d] [<branch>] -- <command>"; return 1; }
+
+    local -a flags pos
+    _gwt_split_args "${(@)pre}"
+    _gwt_expand_short_flags            # future-proof: -da -> -d -a
+    local detach="" f
+    for f in $flags; do
+        case "$f" in
+            -d|--detach) detach=1 ;;
+            *) _gwt_error "unknown flag: $f"; return 1 ;;
+        esac
+    done
+    (( ${#pos} <= 1 )) || { _gwt_error "unexpected argument before '--': ${pos[2]}"; return 1; }
+    local branch="${pos[1]}"
+
+    local wt
+    if [[ -n "$branch" ]]; then
+        wt="$(_gwt_worktree_for_branch "$branch")"
+        [[ -n "$wt" ]] || { _gwt_error "no worktree for branch '$branch'"; return 1; }
+    elif _gwt_is_picker_available; then
+        wt="$(_gwt_pick -p 'exec')" || {
+            [[ $? == 130 ]] && print -z -- "gwx${pre:+ ${(j: :)${(q)pre}}} -- ${(j: :)${(q)cmd}} "   # ESC → restore the line
+            return 0
+        }
+        [[ -n "$wt" ]] || return 0
+    else
+        _gwt_error "usage: gwx [-d] <branch> -- <command>   (no fzf: name a branch)"
+        return 1
+    fi
+    [[ -d "$wt" ]] || { _gwt_error "no worktree at $wt"; return 1; }
+
+    # Attached: subshell keeps the caller's cwd/TTY put; the exit code propagates.
+    if [[ -z "$detach" ]]; then
+        ( cd -q "$wt" && "${cmd[@]}" )
+        return $?
+    fi
+
+    # Detached: `&!` = background + disown (survives the terminal); log stdout+stderr.
+    local REPLY; _gwt_repo_dir || return 1                 # REPLY = $GWT_WORKTREE_DIR/<repo>
+    local logdir="$GWT_EXEC_LOG_DIR/${REPLY:t}"
+    mkdir -p "$logdir" || { _gwt_error "could not create log dir: $logdir"; return 1; }
+    local log="$logdir/${wt:t}.log"
+    setopt local_options no_monitor
+    ( cd -q "$wt" && "${cmd[@]}" ) >| "$log" 2>&1 &!
+    _gwt_info "gwx: '${cmd[1]}' running in background (pid $!) in ${wt:t}"
+    _gwt_info "     log: $log   —   tail -f to watch"
+}
+
 # Remove the worktree gwa created for <branch>.
 # With no <branch>: fzf multi-picker if available (mark several, remove all).
 # gwr [-d | -D] [<branch>] [git-worktree-remove flags, e.g. --force]
@@ -926,9 +1005,19 @@ function _gwt_complete_worktrees() {
     compadd -- $branches
 }
 
+# gwx: worktree branches before `--`; after `--`, defer to normal command completion.
+function _gwt_complete_gwx() {
+    local i
+    for (( i = 2; i < CURRENT; i++ )); do
+        [[ "${words[i]}" == "--" ]] && { _normal; return; }
+    done
+    _gwt_complete_worktrees
+}
+
 (( $+functions[compdef] )) && {
     compdef _gwt_complete_branches gwa
     compdef _gwt_complete_worktrees gwo gws gwr
+    compdef _gwt_complete_gwx gwx
 }
 
 # ---------------------------------------------------------------------------

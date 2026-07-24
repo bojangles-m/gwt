@@ -13,6 +13,7 @@ A fast, hackable **zsh** toolkit for git worktrees. Create, switch, open, list, 
 gwa                     add / create a worktree
 gws                     switch to a worktree (cd)
 gwo                     open a worktree in your editor
+gwx branch -- cmd       run a command in a worktree (no cd)
 gwr                     remove a worktree
 gwl                     status dashboard
 gwclean                 remove stale worktrees
@@ -86,6 +87,7 @@ At a glance — see [Commands](#commands) below for exact syntax and flags.
 | **Work across worktrees**       |                                                                                                                    |
 | 🚀 Native shell `cd`            | Jump right _into_ a worktree — gwt is a sourced zsh plugin, so your shell actually moves (a compiled binary can't) |
 | ⚡ Jump in on create            | `gwa -s` creates or adopts a worktree and drops you straight into it, in one step                                  |
+| 🏃 Run without switching        | `gwx <branch> -- cmd` runs a command in another worktree and streams it live — `-d` backgrounds it. No `cd`        |
 | 📊 Status dashboard             | `gwl` shows dirty state, ahead/behind, and the last commit across all your worktrees                               |
 | 🧭 Origin tracking              | Remembers what each branch was cut from — shown by `gwl -b`                                                        |
 | **Clean up**                    |                                                                                                                    |
@@ -95,7 +97,7 @@ At a glance — see [Commands](#commands) below for exact syntax and flags.
 | 📦 Zero-install &amp; hackable  | One `npx`, no daemon or binary — it's plain zsh you can read and tweak                                             |
 | 🩺 Setup doctor                 | `gwt doctor` checks your environment and shows the effective config                                                |
 | **🔜 Coming soon**              |                                                                                                                    |
-| `exec` in a worktree            | Run a one-off command inside a worktree without `cd`-ing into it                                                   |
+| `gwx -a` across all worktrees   | Run one command across every worktree at once (fan-out)                                                            |
 
 ## Commands
 
@@ -104,6 +106,7 @@ At a glance — see [Commands](#commands) below for exact syntax and flags.
 | `gwa [-c\|-o\|-s] [-m] [--no-fetch] [<branch>] [<start-point>]` | **Create or adopt a worktree.** No `<branch>` → fzf picker: adopt an existing branch, or type a new name to create it. Refreshes `origin` first so colleagues' branches are current (see `GWT_GWA_FETCH`).<br>`-c` — copy the "open" command to the clipboard _(default)_<br>`-o` — open it in your editor<br>`-s` — switch into it (`cd`)<br>`-m` — base a new branch on your default branch (not `HEAD`)<br>`--no-fetch` — skip the `origin` refresh this run |
 | `gwo [<branch>]`                                                | **Open a worktree** in your editor.<br>No `<branch>` → picker (else the most recent).                                                                                                                                                                                                                                                                                                                                                                           |
 | `gws [-o] [<branch>]`                                           | **Switch to a worktree** (`cd`). No `<branch>` → picker.<br>`-o` — also open it in your editor                                                                                                                                                                                                                                                                                                                                                                  |
+| `gwx [-d] [<branch>] -- <command>`                              | **Run a command in a worktree** without `cd`-ing there. No `<branch>` → picker. Everything after `--` runs verbatim; output streams live and the exit code passes through.<br>`-d` — detach: run in the background, output → `~/.gwt/logs/<repo>/<branch>.log`                                                                                                                                                                                                  |
 | `gwr [-d\|-D] [<branch>] [--force]`                             | **Remove a worktree.** The branch is kept by default. No `<branch>` → multi-select picker.<br>`-d` — also delete the branch _(safe: refuses if unmerged)_<br>`-D` — also delete the branch _(force)_<br>`--force` — passed straight through to git                                                                                                                                                                                                              |
 | `gwl [-a] [-p] [-b]`                                            | **Status dashboard** — branch · dirty · ahead/behind · last commit.<br>`-a` — every repo under `GWT_WORKTREE_DIR`<br>`-p` — also show each path + short SHA<br>`-b` — show what each new branch was cut from<br>_short flags bundle: `gwl -abp` = `-a -b -p`_                                                                                                                                                                                                   |
 | `gwclean [-n]`                                                  | **Remove stale worktrees** (merged, or upstream gone).<br>`-n` — dry-run (preview only)                                                                                                                                                                                                                                                                                                                                                                         |

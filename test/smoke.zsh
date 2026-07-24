@@ -28,7 +28,7 @@ fi
 rm -f "$err"
 
 # --- public commands are defined (functions, or gwp which is an alias) ----
-for fn in gwa gws gwo gwr gwl gwclean gwp gwt; do
+for fn in gwa gws gwo gwr gwl gwclean gwp gwt gwx; do
   (( $+functions[$fn] || $+aliases[$fn] )) && _ok "command $fn defined" || _bad "command $fn MISSING"
 done
 
@@ -66,6 +66,25 @@ wt=$(git worktree list --porcelain \
 [[ -n $wt && -d $wt ]] && _ok "gwa created worktree dir" || _bad "gwa created worktree dir"
 
 gwl </dev/null >/dev/null 2>&1 && _ok "gwl runs" || _bad "gwl runs"
+
+# --- gwx: run a command inside the worktree (no cd) -----------------------
+print -- "▶ gwx exec"
+
+out=$(gwx smoke-branch -- pwd 2>/dev/null)
+[[ "${out:A}" == "${wt:A}" ]] && _ok "gwx runs at the worktree root" || _bad "gwx runs at the worktree root (got: $out)"
+
+gwx smoke-branch -- true  >/dev/null 2>&1 && _ok "gwx passes a zero exit code"     || _bad "gwx passes a zero exit code"
+gwx smoke-branch -- false >/dev/null 2>&1;  (( $? != 0 )) && _ok "gwx passes a non-zero exit code" || _bad "gwx passes a non-zero exit code"
+
+gwx smoke-branch pwd      >/dev/null 2>&1;  (( $? != 0 )) && _ok "gwx errors without --"          || _bad "gwx errors without --"
+gwx no-such-branch -- pwd >/dev/null 2>&1;  (( $? != 0 )) && _ok "gwx errors on missing worktree" || _bad "gwx errors on missing worktree"
+
+GWT_EXEC_LOG_DIR="$tmp/logs"
+gwx -d smoke-branch -- sh -c 'echo BG_OK' >/dev/null 2>&1 && _ok "gwx -d launches" || _bad "gwx -d launches"
+log="$tmp/logs/repo/smoke-branch.log"
+found=""
+for i in {1..40}; do [[ -f "$log" ]] && grep -q BG_OK "$log" && { found=1; break; }; sleep 0.05; done
+[[ -n "$found" ]] && _ok "gwx -d wrote its log" || _bad "gwx -d wrote its log ($log)"
 
 gwr smoke-branch </dev/null >/dev/null 2>&1
 [[ -n $wt && ! -e $wt ]] && _ok "gwr removed worktree" || _bad "gwr removed worktree"

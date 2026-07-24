@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Run a command inside a worktree without leaving yours.** `gwx <branch> -- <command>` runs any command in another worktree's directory and streams the output right where you are — no `cd`, no new window. The exit code passes through, so `gwx feat -- pnpm test && …` works. No `<branch>`? An fzf picker lets you choose. Add `-d` to run it in the background (it survives the terminal closing); its output goes to `~/.gwt/logs/<repo>/<branch>.log`.
+
 ## [1.2.1] — 2026-07-22
 
 ### Changed
