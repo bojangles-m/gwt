@@ -1,7 +1,7 @@
 # PRD — gwt: git-worktree toolkit
 
-> **Feature area:** Developer tooling — git worktree CLI (`gwa` / `gws` / `gwo` / `gwr` / `gwl` / `gwclean` / `gwp` / `gwt`)
-> **Status:** Implemented & shipped — describes `@bojangles/gwt` as of 1.1.5 (drafted 2026-07-22)
+> **Feature area:** Developer tooling — git worktree CLI (`gwa` / `gws` / `gwo` / `gwx` / `gwr` / `gwl` / `gwclean` / `gwp` / `gwt`)
+> **Status:** Implemented & shipped — describes `@bojangles/gwt` as of 1.2.x, plus `gwx` (exec) implemented and pending release (drafted 2026-07-22; `gwx` added 2026-07-24)
 > **Type:** Product Requirements (WHAT & WHY) — the complete product, verifiable without reading source.
 > **Owner:** Bojan Mazej
 > **Scope note:** This is the **single, canonical PRD** for gwt. It covers both the **behavior** of every command and the **packaging & distribution** of the tool — install, versioning, update, uninstall, and the development loop. It supersedes the earlier split into a separate behavior PRD and packaging PRD.
@@ -44,6 +44,9 @@ These terms are used throughout and appear in the tool's own output:
 - **Clean vs. dirty** — a worktree is *clean* if it has no uncommitted changes **other than** the seeded config files (see `GWT_COPY_FILES`); otherwise *dirty*.
 - **Session-last worktree** — the worktree most recently created by `gwa` in the current shell; a bare `gws`/`gwo` falls back to it when no picker is available.
 - **Picker** — the interactive fzf list shown when a command needs a branch/worktree and none was given (only when fzf is installed and output is a terminal).
+- **Exec (`gwx`)** — running a command *inside* a worktree's directory without `cd`-ing there; the caller's shell never moves.
+- **Attached vs. detached run** — an *attached* exec streams the command's output live in the current terminal and passes its exit code through; a *detached* run (`gwx -d`) launches it in the background and logs its output to a file.
+- **Fan-out (`gwx -a`)** — running one command across *every* worktree of the current repo (in parallel), rather than a single one.
 
 ## 4. User Stories
 
@@ -103,6 +106,19 @@ As a developer, I want to open a worktree in my editor without switching my shel
 - `gwo <branch>` opens that branch's worktree using the configured open command.
 - `gwo` with no name shows the picker (when available); otherwise it opens the session-last worktree.
 - Naming a branch with no worktree, or an empty fallback (no prior `gwa` this session), produces a clear usage error.
+- Aborting the picker makes no change and re-injects the command onto the prompt.
+
+### US-5a — Run a command in a worktree without switching · `gwx`
+As a developer, I want to run a command inside another worktree without `cd`-ing there, so that I can test, build, or run a git command in a parallel branch while staying where I am.
+
+**Acceptance Criteria**
+- `gwx <branch> -- <command>` runs `<command>` in that branch's worktree directory; the caller's shell never changes directory.
+- Everything after `--` is the command, run **verbatim** (as given, not re-interpreted by a shell); the `--` is **required**. `gwx <branch> <command>` (no `--`) and `gwx <branch> --` (no command) are usage errors. A pipeline/chain is run explicitly, e.g. `gwx <branch> -- zsh -c 'a | b'`.
+- **Attached (default):** the command's output streams live in the current terminal and its exit code becomes `gwx`'s (so `gwx feat -- <test cmd> && …` chains correctly). `gwx` prints nothing of its own.
+- **Detached (`-d`):** the command runs in the background — surviving the terminal closing — with its output written to a per-worktree log file; `gwx` returns immediately after reporting the process id and the log path.
+- With no `<branch>`, a picker (when available) chooses the worktree; without a picker it is a usage error. Naming a branch that has **no** worktree is a clear error — `gwx` does not create one.
+- **Fan-out (`-a`):** `gwx -a -- <command>` runs the command in **every** worktree of the current repo in parallel; it continues even if some fail, prints one labeled result block per worktree, and ends with a summary (how many ran, how many failed and which). Its exit status is non-zero if any worktree's command failed.
+- `-a` combined with an explicit `<branch>` is an error (they contradict). `-a` combined with `-d` (`gwx -da`) launches one background job per worktree, each with its own log.
 - Aborting the picker makes no change and re-injects the command onto the prompt.
 
 ### US-6 — Remove a worktree · `gwr`
@@ -208,7 +224,7 @@ As a user with shell completion enabled, I want to Tab-complete branch names, so
 
 **Acceptance Criteria**
 - `gwa` completes from all branch names (local and remote, de-duplicated, excluding `HEAD`).
-- `gwo`, `gws`, `gwr` complete only branches that currently **have** a worktree.
+- `gwo`, `gws`, `gwr`, and `gwx` complete only branches that currently **have** a worktree (for `gwx`, only before the `--`; after it, normal command completion takes over).
 - `gwr` completion excludes the primary worktree's branch (git won't remove the primary).
 - When completion isn't set up, commands still work by typing names in full.
 
@@ -217,7 +233,7 @@ As a user, I want help/version/diagnostics/update/uninstall to work from anywher
 
 **Acceptance Criteria**
 - `gwt`, `gwt -h`, `gwt -v`, `gwt doctor`, `gwt update`, `gwt uninstall` work from any directory.
-- Each worktree command (`gwa`, `gws`, `gwo`, `gwr`, `gwclean`, and `gwl` without `-a`) run outside a git repository prints a clear "not inside a git repository" message and exits non-zero — never a raw git error.
+- Each worktree command (`gwa`, `gws`, `gwo`, `gwx`, `gwr`, `gwclean`, and `gwl` without `-a`) run outside a git repository prints a clear "not inside a git repository" message and exits non-zero — never a raw git error.
 - `gwl -a` is exempt: it operates on the base folder and works from anywhere.
 
 ### US-17 — Install on a clean machine
@@ -263,7 +279,7 @@ As a user who can't or won't use the one-command installer, I want a documented 
 **Worktree layout & shared rules**
 - **FR-1** Every managed worktree resides at `<GWT_WORKTREE_DIR>/<repo-name>/<branch>`, with `/` in the branch flattened to `-` for the folder name.
 - **FR-2** Worktree paths are always derived, never chosen by the user; all commands locate worktrees by consulting git's worktree list, not by remembering paths.
-- **FR-3** Every worktree-acting command (`gwa`, `gws`, `gwo`, `gwr`, `gwclean`, and `gwl` without `-a`) must verify it is inside a git repository up front and, if not, emit a single uniform "not inside a git repository" error and a non-zero exit.
+- **FR-3** Every worktree-acting command (`gwa`, `gws`, `gwo`, `gwx`, `gwr`, `gwclean`, and `gwl` without `-a`) must verify it is inside a git repository up front and, if not, emit a single uniform "not inside a git repository" error and a non-zero exit.
 - **FR-4** Messages are prefixed with the name of the public command that produced them; informational output goes to standard output, while notes/warnings/errors go to standard error and are colored on a terminal (unless `NO_COLOR`).
 
 **`gwa` — create/adopt**
@@ -279,6 +295,11 @@ As a user who can't or won't use the one-command installer, I want a documented 
 - **FR-11** `gws <branch>` changes directory to that worktree; `-o` also opens it. `gws` targeting the primary branch reaches the primary worktree.
 - **FR-12** `gwo <branch>` opens that worktree in the editor without changing the shell's directory.
 - **FR-13** With no branch name, `gws`/`gwo` use the picker when available, else the session-last worktree; an empty result yields a usage error, and a non-existent path yields a clear error. Aborting the picker changes nothing and re-injects the command line.
+
+**`gwx` — run a command in a worktree**
+- **FR-13a** `gwx [<branch>] -- <command>` runs `<command>` (verbatim argv after a required `--`) in the target worktree via a subshell, so the caller's directory never changes, and propagates the command's exit status. Missing `--`, an empty command, or a branch with no worktree each yield a clear error (no worktree is created). With no branch, the picker chooses one (usage error if unavailable); aborting the picker re-injects the command line.
+- **FR-13b** `-d`/`--detach` runs the command in the background (disowned — survives the terminal), redirecting its output to a per-worktree log file; `gwx` returns immediately, reporting the process id and log path.
+- **FR-13c** `-a`/`--all` runs the command in every worktree of the current repo in parallel, continuing on error; it prints a per-worktree result block and a trailing summary (count run, count failed with names), and exits non-zero if any failed. `-a` with an explicit branch is an error. `-da` launches one detached, logged background job per worktree.
 
 **`gwr` — remove**
 - **FR-14** `gwr <branch>` removes that branch's worktree and, by default, keeps the branch. With no name, a multi-select picker (excluding the current worktree) removes all marked worktrees; selecting nothing is a no-op.
@@ -336,6 +357,7 @@ As a user who can't or won't use the one-command installer, I want a documented 
 - **Doctor (`gwt doctor`):** a summary line first, then a **Required** group and an **Optional** group, each entry marked `✓` (pass), `✗` (fail, with a copy-pasteable fix), or `?` (present but not statically verifiable); then a **Config (effective)** block listing each setting's value; and, outside a repo, a trailing `ℹ` note that the current directory isn't a git repository.
 - **Pickers:** an fzf list showing the branch (with relative date on the branch picker), a live preview pane (recent commits + status for worktrees; author + recent commits for the branch picker), `ctrl-/` to toggle the preview, and a header describing the keys. The remove picker supports multi-select (Tab to mark). Aborting (Esc/Ctrl-C) leaves the typed command on the prompt for editing.
 - **`gwa` output:** git's own "Preparing worktree…" line, then `worktree: <path>` (with `(from <base>)` for a newly cut branch); adoption from a remote is announced beforehand; reusing an existing worktree reports its path.
+- **`gwx` output:** attached exec adds nothing of its own — only the command's own output appears, in the current terminal. Detached (`-d`) prints a `running in background (pid …)` line plus the log path. Fan-out (`-a`) prints one block per worktree — a `▶ <branch>` header, the command's captured output, and a `✓ exit 0` / `✗ exit <n>` line — then a summary line `gwx -a: N worktree(s) · X ok · Y failed (names)`. `-da` prints one `launched <branch> (pid … · log …)` line per worktree.
 - **Removal progress:** a braille spinner on a single line (`⠹ removing <name>…`) that is overwritten in place by `✓ removed <name>` the instant it finishes — the same line, no lingering spinner. Identical whether the removal trashed (near-instant) or removed natively (slower); on a non-terminal there is no spinner, just the `✓ removed <name>` line.
 - **Messages:** `<command>: <message>` form; errors in red, notes in orange, warnings in yellow (on a terminal). Informational output is plain on standard output.
 - **Version (`gwt -v`):** the bare version string alone (e.g. `1.1.5`); a development/linked build reports a clearly-marked development version.

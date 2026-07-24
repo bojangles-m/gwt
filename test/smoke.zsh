@@ -86,6 +86,19 @@ found=""
 for i in {1..40}; do [[ -f "$log" ]] && grep -q BG_OK "$log" && { found=1; break; }; sleep 0.05; done
 [[ -n "$found" ]] && _ok "gwx -d wrote its log" || _bad "gwx -d wrote its log ($log)"
 
+# --- gwx -a: fan out across all worktrees ---------------------------------
+gwx -a -- true  >/dev/null 2>&1 && _ok "gwx -a runs in all worktrees" || _bad "gwx -a runs in all worktrees"
+gwx -a -- false >/dev/null 2>&1; (( $? != 0 )) && _ok "gwx -a returns non-zero when any fails" || _bad "gwx -a returns non-zero when any fails"
+gwx -a smoke-branch -- true >/dev/null 2>&1; (( $? != 0 )) && _ok "gwx -a + branch is an error" || _bad "gwx -a + branch is an error"
+gwx -a -- true 2>/dev/null | grep -q "gwx -a:" && _ok "gwx -a prints a summary" || _bad "gwx -a prints a summary"
+
+GWT_EXEC_LOG_DIR="$tmp/logs-fan"
+gwx -da -- sh -c 'echo FANOUT' >/dev/null 2>&1 && _ok "gwx -da launches per worktree" || _bad "gwx -da launches per worktree"
+flog="$tmp/logs-fan/repo/smoke-branch.log"
+found=""
+for i in {1..40}; do [[ -f "$flog" ]] && grep -q FANOUT "$flog" && { found=1; break; }; sleep 0.05; done
+[[ -n "$found" ]] && _ok "gwx -da logged per worktree" || _bad "gwx -da logged per worktree"
+
 gwr smoke-branch </dev/null >/dev/null 2>&1
 [[ -n $wt && ! -e $wt ]] && _ok "gwr removed worktree" || _bad "gwr removed worktree"
 

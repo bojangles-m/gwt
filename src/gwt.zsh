@@ -108,11 +108,13 @@ Usage:
   gwo [<branch>]                    Open a worktree in your editor. No <branch>: fzf picker (else the most recent).
   gws [-o] [<branch>]               Switch to a worktree (cd). No <branch>: fzf picker; -o also opens it in your editor.
 
-  gwx [-d] [<branch>] -- <command>
+  gwx [-d | --detach] [-a | --all] [<branch>] -- <command>
       Run a command inside a worktree without cd-ing there. No <branch>: fzf picker.
       Everything after -- runs verbatim; output streams live and the exit code passes through.
           -d    Detach: run in the background (survives the terminal). Output is logged to
-                ~/.gwt/logs/<repo>/<branch>.log — tail -f it to watch.
+                $GWT_EXEC_LOG_DIR/<repo>/<branch>.log — tail -f it to watch.
+          -a    Run in ALL worktrees of this repo (parallel; continues on error, then a
+                summary). Combine with -d (gwx -da) to background one job per worktree.
 
   gwr [-d | -D] [<branch>] [--force]
       Remove a worktree. The branch is KEPT unless you pass -d/-D.
@@ -546,13 +548,14 @@ function gws() {
 
 # ---------------------------------------------------------------------------
 # gwx — run a command inside a worktree without cd-ing there ("exec").
-# gwx [-d | --detach] [<branch>] -- <command> [args…]
+# gwx [-d | --detach] [-a | --all] [<branch>] -- <command> [args…]
 #   No <branch>: fzf picker (single-select) to choose the worktree.
+#   -a/--all: run in every worktree of this repo (parallel; continue on error + summary).
 #   Everything after `--` is the command, run VERBATIM (direct argv, no shell).
 #     Need a pipe/chain? gwx <b> -- zsh -c 'a | b'.
 #   Default (attached): streams live, stdin/TTY connected, exit code passes through.
 #   -d/--detach: run in the background (disowned — survives the terminal closing);
-#     output → ~/.gwt/logs/<repo>/<worktree>.log.
+#     output → $GWT_EXEC_LOG_DIR/<repo>/<worktree>.log.  -da: one background job per worktree.
 # ---------------------------------------------------------------------------
 function gwx() {
     _gwt_require_repo || return 1
@@ -570,15 +573,23 @@ function gwx() {
     local -a flags pos
     _gwt_split_args "${(@)pre}"
     _gwt_expand_short_flags            # future-proof: -da -> -d -a
-    local detach="" f
+    local detach="" all="" f
     for f in $flags; do
         case "$f" in
             -d|--detach) detach=1 ;;
+            -a|--all)    all=1 ;;
             *) _gwt_error "unknown flag: $f"; return 1 ;;
         esac
     done
     (( ${#pos} <= 1 )) || { _gwt_error "unexpected argument before '--': ${pos[2]}"; return 1; }
     local branch="${pos[1]}"
+
+    # -a: run in every worktree of this repo (a branch name would contradict "all").
+    if [[ -n "$all" ]]; then
+        [[ -z "$branch" ]] || { _gwt_error "-a runs in all worktrees — drop the branch name"; return 1; }
+        _gwt_exec_all "$detach" "${cmd[@]}"
+        return $?
+    fi
 
     local wt
     if [[ -n "$branch" ]]; then
@@ -611,6 +622,62 @@ function gwx() {
     ( cd -q "$wt" && "${cmd[@]}" ) >| "$log" 2>&1 &!
     _gwt_info "gwx: '${cmd[1]}' running in background (pid $!) in ${wt:t}"
     _gwt_info "     log: $log   —   tail -f to watch"
+}
+
+# Run <cmd…> in every worktree of the current repo.
+# $1 = detach flag ("" = attached, non-empty = -da); the rest is the command.
+#   Attached: run all in parallel (output captured), then print a labeled block per
+#   worktree + a summary; continue on error; non-zero if any failed.
+#   Detached (-da): launch a disowned background job per worktree, each to its own log.
+function _gwt_exec_all() {
+    local detach="$1"; shift
+    local -a cmd=("$@")
+
+    local -a reply; _gwt_worktrees
+    local -a wts; local row
+    for row in $reply; do wts+=("${row%%$'\t'*}"); done
+    (( ${#wts} )) || { _gwt_error "no worktrees in this repo"; return 1; }
+
+    local REPLY; _gwt_repo_dir || return 1
+    local logbase="$GWT_EXEC_LOG_DIR/${REPLY:t}"
+    setopt local_options no_monitor
+
+    if [[ -n "$detach" ]]; then
+        mkdir -p "$logbase" || { _gwt_error "could not create log dir: $logbase"; return 1; }
+        local wt log
+        for wt in $wts; do
+            log="$logbase/${wt:t}.log"
+            ( cd -q "$wt" && "${cmd[@]}" ) >| "$log" 2>&1 &!
+            _gwt_info "gwx: launched ${wt:t} (pid $! · log $log)"
+        done
+        return 0
+    fi
+
+    local tmpd; tmpd="$(mktemp -d "${TMPDIR:-/tmp}/gwx.XXXXXX")" || { _gwt_error "could not create a temp dir"; return 1; }
+    local -a pids
+    local i
+    for (( i = 1; i <= ${#wts}; i++ )); do
+        ( cd -q "${wts[$i]}" && "${cmd[@]}" ) >"$tmpd/$i.out" 2>&1 &
+        pids+=($!)
+    done
+    local -a rcs
+    for (( i = 1; i <= ${#pids}; i++ )); do wait ${pids[$i]}; rcs[$i]=$?; done
+
+    local ok=0 failed=0 rc wt line
+    local -a failed_names
+    for (( i = 1; i <= ${#wts}; i++ )); do
+        wt="${wts[$i]}"; rc=${rcs[$i]}
+        (( i > 1 )) && _gwt_info ""
+        _gwt_info "▶ ${wt:t}"
+        while IFS= read -r line || [[ -n "$line" ]]; do _gwt_info "  $line"; done < "$tmpd/$i.out"
+        if (( rc == 0 )); then _gwt_info "  ✓ exit 0"; (( ok++ ))
+        else                   _gwt_info "  ✗ exit $rc"; (( failed++ )); failed_names+=("${wt:t}"); fi
+    done
+    rm -rf "$tmpd"
+
+    _gwt_info ""
+    _gwt_info "gwx -a: ${#wts} worktree(s) · ${ok} ok · ${failed} failed${failed_names:+ (${(j:, :)failed_names})}"
+    return $(( failed ? 1 : 0 ))
 }
 
 # Remove the worktree gwa created for <branch>.

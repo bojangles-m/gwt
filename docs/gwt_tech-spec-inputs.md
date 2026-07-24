@@ -4,8 +4,8 @@
 > It captures the HOW-level detail that the PRD (`gwt-prd.md`) deliberately excludes —
 > file locations, git plumbing, algorithms, the installer mechanism — so a future
 > `to-tech-spec` pass (or a maintainer) has it in one place instead of only in code
-> comments. **Status: the tool is implemented and shipped (`@bojangles/gwt`, current 1.1.5);
-> this reflects the shipped code.** Items are decided ("locked") unless marked OPEN.
+> comments. **Status: the tool is implemented and shipped (`@bojangles/gwt`, current 1.2.x);
+> this reflects the shipped code, plus `gwx` (exec) — implemented, pending release.** Items are decided ("locked") unless marked OPEN.
 
 ---
 
@@ -87,7 +87,7 @@ Symlinks `~/.gwt/gwt.zsh` → the clone's `src/gwt.zsh` (not a copy) and ensures
 
 - **`_gwt_require_repo`** — `git rev-parse --is-inside-work-tree`; on failure emits the uniform `not inside a git repository` and returns 1. Called first in `gwa`/`gws`/`gwo`/`gwr`/`gwclean` and in `gwl`'s non-`-a` branch.
 - **`_gwt_split_args`** — splits argv into caller-local `flags` (tokens starting `-`) and `pos` arrays.
-- **`_gwt_expand_short_flags`** — expands bundled short flags in the caller-local `flags` array (`-abp` → `-a -b -p`); leaves `--long` and single `-x` untouched; generic (no per-flag knowledge — the caller's `case` still validates letters). Opt-in and reusable; **only `gwl` calls it today**, so other commands' parsing is unchanged.
+- **`_gwt_expand_short_flags`** — expands bundled short flags in the caller-local `flags` array (`-abp` → `-a -b -p`); leaves `--long` and single `-x` untouched; generic (no per-flag knowledge — the caller's `case` still validates letters). Opt-in and reusable; **`gwl` and `gwx` call it** (`gwl -abp`, `gwx -da`/`-ad`) — other commands' parsing is unchanged.
 - **`_gwt_repo_dir`** — `REPLY = $GWT_WORKTREE_DIR/<repo>` where `<repo>` = basename of the parent of `git rev-parse --git-common-dir` (resolved absolute). Errors cleanly outside a repo.
 - **`_gwt_wt_path <branch>`** — `REPLY = <repo dir>/${branch//\//-}` (slash-flatten for the folder; branch keeps its real name).
 - **`_gwt_worktrees [dir]`** — parses `git worktree list --porcelain` into `reply=("path<TAB>branch" …)`; branch is `(detached)` for detached HEAD; primary is first.
@@ -186,9 +186,10 @@ Alias: `git worktree prune`.
 
 ### B.12 Completion
 
-- Registered only if `compdef` exists: `compdef _gwt_complete_branches gwa`; `compdef _gwt_complete_worktrees gwo gws gwr`.
+- Registered only if `compdef` exists: `compdef _gwt_complete_branches gwa`; `compdef _gwt_complete_worktrees gwo gws gwr`; `compdef _gwt_complete_gwx gwx`.
 - `_gwt_complete_branches` — local heads + `refs/remotes` (lstrip=3), `-U` deduped, minus `HEAD`.
 - `_gwt_complete_worktrees` — branches that have a worktree; for `gwr` (`$words[1] == gwr`) skip the primary (first row); skip `(detached)`.
+- `_gwt_complete_gwx` — before the `--`, delegates to `_gwt_complete_worktrees` (all worktree branches incl. primary — `$words[1]` is `gwx`, not `gwr`); after the `--`, calls `_normal` so the command + its args complete normally (the `sudo`/`nohup` precommand pattern).
 
 ### B.13 Doctor (`_gwt_doctor`)
 
@@ -196,6 +197,23 @@ Alias: `git worktree prune`.
 - Optional: `fzf`; editor = first word of `$GWT_OPEN_CMD` (`?` if unverifiable); clipboard = first word of `$GWT_CLIPBOARD_CMD`; completion = `$+functions[compdef]`.
 - Optional also includes **trash** = first word of `$GWT_TRASH_CMD` probed with `command -v`; present → `✓`, absent → non-failing `?` (speed-up only, never counted as `opt_miss`).
 - Summary line first; Required + Optional groups; **Config (effective)** dumps all seven knobs (incl. `GWT_TRASH_CMD`); outside a repo, a non-failing `ℹ` note. Exit `req_fail ? 1 : 0`.
+
+### B.14 `gwx` — run a command in a worktree (exec)
+
+`gwx [-d|--detach] [-a|--all] [<branch>] -- <command>`. Placed after `gws()`; a work-across-worktrees verb. Helper `_gwt_exec_all` (fan-out) placed right after `gwx`.
+
+- **Arg split:** iterate argv, split at the **first** `--` into `pre` (gwx flags + optional branch) and `cmd` (verbatim; later `--` stay in `cmd`, so `gwx feat -- git log -- path` passes the pathspec through). Missing `--` or empty `cmd` → error.
+- **Flags:** `pre` → `_gwt_split_args` + `_gwt_expand_short_flags` (so `-da`/`-ad` bundle) → `-d`/`--detach`, `-a`/`--all`; `>1` positional → error.
+- **Run mechanic:** always a subshell `( cd -q "$wt" && "${cmd[@]}" )` — caller's cwd never moves; `cd -q` suppresses `chpwd` hooks; argv run **directly** (no `eval`) so exit code + TTY pass through (pipes/chains need `-- zsh -c '…'`). Mirrors `gwa`'s `( cd "$wt" && … )` for `GWT_POST_INIT_CMD`.
+- **Single-worktree resolve:** explicit `<branch>` → `_gwt_worktree_for_branch` (none → error, **no** auto-create); no branch → `_gwt_pick -p exec` (ESC rc 130 → `print -z` reinject of the full line incl. `--` + cmd); no picker → usage error.
+  - *Attached (default):* run the subshell in the foreground, `return $?`; no stdout chrome.
+  - *Detached (`-d`):* `( cd -q "$wt" && "${cmd[@]}" ) >| "$log" 2>&1 &!` (`&!` = background + disown → survives terminal close), `no_monitor`; `log=$GWT_EXEC_LOG_DIR/<repo>/${wt:t}.log`; print pid + log via `_gwt_info`.
+- **Fan-out — `_gwt_exec_all "$detach" "${cmd[@]}"`** (dispatched from `gwx` when `-a`; `-a` + branch → error): enumerate worktrees via `_gwt_worktrees` (all, incl. primary + current); `logbase=$GWT_EXEC_LOG_DIR/${REPLY:t}`; `no_monitor`.
+  - *Attached:* launch each subshell backgrounded with output → `$tmpd/$i.out`; collect exit codes with `wait ${pids[$i]}`; then print per-worktree blocks (`▶ ${wt:t}`, indented captured output, `✓/✗ exit rc`) in worktree order + a summary `gwx -a: N · X ok · Y failed (names)`; continue-on-error; `return $(( failed ? 1 : 0 ))`. Mirrors `gwl`'s temp-file + `wait` parallel scan.
+  - *Detached (`-da`):* one `&!` job per worktree, each to `$logbase/${wt:t}.log`; one `launched …` line each; `return 0` (no wait/summary — nothing to aggregate).
+- **`GWT_EXEC_LOG_DIR`** — top-of-file var (default `$HOME/.gwt/logs`), the single source for the log path; **not** a documented knob (see §C). Code, the help heredoc (expands it), and comments all reference it; tests override it to stay hermetic.
+- **Non-interactive fan-out:** `-a` redirects output, so no TTY is attached across the N commands (a command needing stdin gets none — expected).
+- **Concurrency:** unbounded (worktree counts are small; a cap is a future refinement).
 
 ---
 
@@ -211,6 +229,7 @@ Alias: `git worktree prune`.
 | `GWT_PICKER_OPTIONS` | (empty) | extra fzf options, word-split via `${=…}` |
 | `GWT_TRASH_CMD` | auto (`trash` if on PATH, else `''`) | trashes a path for fast `gwr`/`gwclean`; first word probed with `command -v`, then `eval`'d; `''` forces native remove. Auto-detected only when unset (`(( ! ${+GWT_TRASH_CMD} ))`), so an explicit empty value is respected |
 | `GWT_GWA_FETCH` | `1` (on) | refresh `origin` before the `gwa` picker/lookup so remote branches are current; `0` disables globally, `gwa --no-fetch` per-run. Checked as `!= 0` |
+| `GWT_EXEC_LOG_DIR` | `~/.gwt/logs` | base dir for `gwx -d`/`-da` detached logs (`<base>/<repo>/<worktree>.log`). **Internal** — a top-of-file var, *not* a documented knob (absent from `_gwt_help_config`/doctor/README); tests override it directly |
 | `NO_COLOR` | — | any value disables color in `gwl` and messages |
 
 ---
@@ -227,14 +246,19 @@ Alias: `git worktree prune`.
 - **Fast worktree removal via `GWT_TRASH_CMD`** (auto-detects `trash`): `gwr` clean-path + `gwclean` move-to-trash + `git worktree prune`; native fallback (and on trash failure). Dirty/`--force` stay raw git (safety unchanged). Uniform per-worktree in-place spinner → `✓ removed <name>` for **both** methods.
 - **`gwa` refreshes `origin` by default** (`GWT_GWA_FETCH=1`; `--no-fetch` / `=0` off): fetch before the picker, and before resolving a **non-local** named branch (local branch → no fetch). Non-blocking (offline warns + continues; no origin → silent skip). Fixes the footgun where an unfetched `origin/<branch>` became a wrong new branch. Scope: `gwa` only (`gwo`/`gws`/`gwr` untouched; `gwl` freshness deferred; `gwclean` already fetches).
 - **Durable branch-origin stamp** stored in `git config branch.<name>.gwtBase` on new-branch creation; shown by **`gwl -b`/`--base`** (`—` when absent); unset on branch delete. `gwclean` does **not** consume it yet (deferred — changes a destructive command). No env knob. First-cut consumer = display only (chosen over gwclean-accuracy).
-- **`gwl` short-flag bundling** via reusable `_gwt_expand_short_flags` (`gwl -abp`). Scoped to `gwl` only — other commands have mutually-exclusive letter flags (`gwa -c/-o/-s`, `gwr -d/-D`) where bundling is contradictory; the shared splitter is untouched so they don't change. Long flags never bundle (standard).
+- **`gwl` short-flag bundling** via reusable `_gwt_expand_short_flags` (`gwl -abp`). Opt-in: called by `gwl` and (later) `gwx` — commands whose flags are *combinable*. Commands with mutually-exclusive letter flags (`gwa -c/-o/-s`, `gwr -d/-D`) deliberately don't call it, so their parsing is unchanged. Long flags never bundle (standard).
+
+**Decided (`gwx`, later — pending release):**
+- **`gwx` — run a command in a worktree (exec).** Single-worktree first, then fan-out (`-a`). `--` required; argv run **verbatim** via a `cd -q` subshell (no `eval`) so cwd/TTY/exit-code pass through (pipes need `-- zsh -c '…'`). `-d` detaches (`&!` + disown; per-worktree log under `GWT_EXEC_LOG_DIR`, default `~/.gwt/logs`, an internal non-knob var). `-a` fans out across all worktrees of the repo in parallel (temp-file + `wait`, buffered blocks + summary, continue-on-error, non-zero if any failed); `-a` + branch → error; `-da` = detached fan-out (one job/log per worktree). No auto-create; no job registry. Completion via `_gwt_complete_gwx` (worktree branches before `--`, `_normal` after). Details in B.14.
+- **Name `gwx`, not `gwt exec`** — operational verbs are `gw<letter>`; `gwt <word>` is tool-meta only.
+- **Log dir is not a shell knob** — `GWT_EXEC_LOG_DIR` is a top-of-file var, single source for the path, but deliberately undocumented (the tool otherwise documents every knob; this one isn't meant to be tuned).
 
 **Out of scope (this iteration):** package.json `engines` (none); full Linux auto-defaults; cross-repo/global `-g`; Tab-opens-picker; `gwclean` using the origin stamp; flag-bundling on non-`gwl` commands.
 
 **Pending action:**
 - ☐ `npm deprecate "@bojangles/gwt@<1.1.4" "superseded — please use the latest version (npx @bojangles/gwt@latest)"` (needs the maintainer's 2FA OTP).
 
-**Deferred (backlog):** Tab opens the picker · cross-repo/global `-g` · full Linux-aware auto-defaults.
+**Deferred (backlog):** Tab opens the picker · cross-repo/global `-g` · full Linux-aware auto-defaults · `gwx` extras — auto-create (`--create`), job registry (`--jobs`/`--stop`), mirror-subpath (`-C`/`--here`), a concurrency cap for `-a` (a shell-settable log dir is **won't-do**).
 
 ---
 
